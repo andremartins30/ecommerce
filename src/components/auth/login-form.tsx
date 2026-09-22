@@ -6,27 +6,25 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { loginSchema, type LoginValues } from "@/lib/auth-schema";
-import { useAuthStore } from "@/store/auth-store";
+import { loginAction } from "@/server/services/auth/actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInput } from "@/components/auth/password-input";
-import { SocialButtons } from "@/components/auth/social-buttons";
-import { Separator } from "@/components/ui/separator";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const login = useAuthStore((s) => s.login);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     setValue,
+    setError,
     watch,
     formState: { errors },
   } = useForm<LoginValues>({
@@ -36,10 +34,20 @@ export function LoginForm() {
 
   async function onSubmit(values: LoginValues) {
     setSubmitting(true);
+    setFormError(null);
     try {
-      await login(values.email);
-      toast.success("Welcome back");
+      const result = await loginAction(values);
+      if (!result.success) {
+        if (result.fieldErrors) {
+          for (const [field, message] of Object.entries(result.fieldErrors)) {
+            setError(field as keyof LoginValues, { message });
+          }
+        }
+        setFormError(result.formError ?? "Não foi possível entrar. Tente novamente.");
+        return;
+      }
       router.push(searchParams.get("redirect") || "/account");
+      router.refresh();
     } finally {
       setSubmitting(false);
     }
@@ -47,20 +55,20 @@ export function LoginForm() {
 
   return (
     <div>
-      <h1 className="font-heading text-2xl font-semibold text-foreground">Welcome back</h1>
-      <p className="mt-1.5 text-sm text-muted-foreground">Sign in to continue to your account.</p>
+      <h1 className="font-heading text-2xl font-semibold text-foreground">Bem-vindo de volta</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">Entre para continuar na sua conta.</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-7 space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="you@example.com" {...register("email")} />
+          <Label htmlFor="email">E-mail</Label>
+          <Input id="email" type="email" placeholder="voce@exemplo.com" {...register("email")} />
           {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">Senha</Label>
             <Link href="/forgot-password" className="text-xs font-medium text-accent hover:underline">
-              Forgot password?
+              Esqueceu a senha?
             </Link>
           </div>
           <PasswordInput id="password" placeholder="••••••••" {...register("password")} />
@@ -71,26 +79,19 @@ export function LoginForm() {
             checked={watch("remember")}
             onCheckedChange={(checked) => setValue("remember", !!checked)}
           />
-          Remember me
+          Lembrar de mim
         </label>
+        {formError && <p className="text-sm text-destructive">{formError}</p>}
         <Button type="submit" size="lg" className="w-full gap-2" disabled={submitting}>
           {submitting && <Loader2 className="size-4 animate-spin" />}
-          {submitting ? "Signing in…" : "Sign In"}
+          {submitting ? "Entrando…" : "Entrar"}
         </Button>
       </form>
 
-      <div className="my-6 flex items-center gap-3">
-        <Separator className="flex-1" />
-        <span className="text-xs text-muted-foreground">OR</span>
-        <Separator className="flex-1" />
-      </div>
-
-      <SocialButtons />
-
       <p className="mt-7 text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{" "}
+        Não tem uma conta?{" "}
         <Link href="/register" className="font-medium text-foreground hover:underline">
-          Create one
+          Criar conta
         </Link>
       </p>
     </div>

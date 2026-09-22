@@ -6,27 +6,25 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { registerSchema, type RegisterValues } from "@/lib/auth-schema";
-import { useAuthStore } from "@/store/auth-store";
+import { registerAction } from "@/server/services/auth/actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInput } from "@/components/auth/password-input";
 import { PasswordStrength } from "@/components/auth/password-strength";
-import { SocialButtons } from "@/components/auth/social-buttons";
-import { Separator } from "@/components/ui/separator";
 
 export function RegisterForm() {
   const router = useRouter();
-  const registerUser = useAuthStore((s) => s.register);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     setValue,
+    setError,
     watch,
     formState: { errors },
   } = useForm<RegisterValues>({
@@ -36,10 +34,20 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterValues) {
     setSubmitting(true);
+    setFormError(null);
     try {
-      await registerUser(values.name, values.email);
-      toast.success("Account created", { description: "Welcome to NEBULA." });
+      const result = await registerAction(values);
+      if (!result.success) {
+        if (result.fieldErrors) {
+          for (const [field, message] of Object.entries(result.fieldErrors)) {
+            setError(field as keyof RegisterValues, { message });
+          }
+        }
+        setFormError(result.formError ?? "Não foi possível criar a conta. Tente novamente.");
+        return;
+      }
       router.push("/account");
+      router.refresh();
     } finally {
       setSubmitting(false);
     }
@@ -47,28 +55,30 @@ export function RegisterForm() {
 
   return (
     <div>
-      <h1 className="font-heading text-2xl font-semibold text-foreground">Create your account</h1>
-      <p className="mt-1.5 text-sm text-muted-foreground">Join NEBULA for faster checkout and order tracking.</p>
+      <h1 className="font-heading text-2xl font-semibold text-foreground">Crie sua conta</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">
+        Cadastre-se para um checkout mais rápido e acompanhamento de pedidos.
+      </p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-7 space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="name">Full Name</Label>
-          <Input id="name" placeholder="Jordan Avery" {...register("name")} />
+          <Label htmlFor="name">Nome completo</Label>
+          <Input id="name" placeholder="Maria Silva" {...register("name")} />
           {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="you@example.com" {...register("email")} />
+          <Label htmlFor="email">E-mail</Label>
+          <Input id="email" type="email" placeholder="voce@exemplo.com" {...register("email")} />
           {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">Senha</Label>
           <PasswordInput id="password" placeholder="••••••••" {...register("password")} />
           <PasswordStrength password={watch("password") || ""} />
           {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+          <Label htmlFor="confirmPassword">Confirmar senha</Label>
           <PasswordInput id="confirmPassword" placeholder="••••••••" {...register("confirmPassword")} />
           {errors.confirmPassword && (
             <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>
@@ -82,13 +92,13 @@ export function RegisterForm() {
               className="mt-0.5"
             />
             <span>
-              I agree to the{" "}
+              Eu concordo com os{" "}
               <Link href="/" className="underline underline-offset-2">
-                Terms of Service
+                Termos de Serviço
               </Link>{" "}
-              and{" "}
+              e a{" "}
               <Link href="/" className="underline underline-offset-2">
-                Privacy Policy
+                Política de Privacidade
               </Link>
             </span>
           </label>
@@ -96,24 +106,17 @@ export function RegisterForm() {
             <p className="mt-1 text-xs text-destructive">{errors.agreeToTerms.message}</p>
           )}
         </div>
+        {formError && <p className="text-sm text-destructive">{formError}</p>}
         <Button type="submit" size="lg" className="w-full gap-2" disabled={submitting}>
           {submitting && <Loader2 className="size-4 animate-spin" />}
-          {submitting ? "Creating account…" : "Create Account"}
+          {submitting ? "Criando conta…" : "Criar conta"}
         </Button>
       </form>
 
-      <div className="my-6 flex items-center gap-3">
-        <Separator className="flex-1" />
-        <span className="text-xs text-muted-foreground">OR</span>
-        <Separator className="flex-1" />
-      </div>
-
-      <SocialButtons />
-
       <p className="mt-7 text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
+        Já tem uma conta?{" "}
         <Link href="/login" className="font-medium text-foreground hover:underline">
-          Sign in
+          Entrar
         </Link>
       </p>
     </div>

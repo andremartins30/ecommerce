@@ -1,10 +1,15 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { VerifyEmail } from "@/components/auth/verify-email";
 
 export const metadata: Metadata = {
-  title: "Verify Email",
+  title: "Verificar e-mail",
 };
 
 export default function VerifyEmailPage() {
-  return <VerifyEmail />;
+  return (
+    <Suspense>
+      <VerifyEmail />
+    </Suspense>
+  );
 }

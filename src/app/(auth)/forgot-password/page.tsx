@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 export const metadata: Metadata = {
-  title: "Forgot Password",
+  title: "Esqueci minha senha",
 };
 
 export default function ForgotPasswordPage() {

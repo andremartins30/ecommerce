@@ -19,18 +19,23 @@ import { NAV_LINKS } from "@/lib/nav";
 import { useCartCount, useCartStore } from "@/store/cart-store";
 import { useWishlistCount } from "@/store/wishlist-store";
 import { useCompareCount } from "@/store/compare-store";
-import { useAuthStore } from "@/store/auth-store";
 import { useUiStore } from "@/store/ui-store";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 
-export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
+export function SiteHeader({
+  transparent = false,
+  userDisplayName,
+}: {
+  transparent?: boolean;
+  /** First name of the signed-in customer, resolved server-side from the real session. Null when signed out. */
+  userDisplayName: string | null;
+}) {
   const [scrolled, setScrolled] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const pathname = usePathname();
   const hydrated = useHydrated();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = userDisplayName !== null;
   const cartCount = useCartCount();
   const wishlistCount = useWishlistCount();
   const compareCount = useCompareCount();
@@ -125,17 +130,17 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
 
             {/* Account / Sign In */}
             <Link
-              href={hydrated && isAuthenticated ? "/account" : "/register"}
+              href={isAuthenticated ? "/account" : "/login"}
               className="group flex flex-col items-center gap-1 text-slate-700 transition-colors hover:text-[#0B1A30]"
             >
               <div className="relative">
                 <User className="size-5 transition-transform duration-200 group-hover:scale-110" strokeWidth={1.75} />
-                {hydrated && isAuthenticated && (
+                {isAuthenticated && (
                   <span className="absolute -top-1 -right-1 size-2 rounded-full bg-emerald-500 ring-2 ring-white" />
                 )}
               </div>
               <span className="hidden text-[11px] font-medium sm:block">
-                {hydrated && isAuthenticated ? (user?.name?.split(" ")[0] ?? "Account") : "Sign Up"}
+                {isAuthenticated ? userDisplayName!.split(" ")[0] : "Entrar"}
               </span>
             </Link>
 

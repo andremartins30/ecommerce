@@ -12,10 +12,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { logoutAction } from "@/server/services/auth/actions";
 import Link from "next/link";
 
-export function AdminTopbar() {
+export function AdminTopbar({ adminName, adminEmail }: { adminName: string; adminEmail: string }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const initials = adminName
+    .split(" ")
+    .map((part) => part.charAt(0))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur-md sm:px-6">
@@ -43,14 +50,23 @@ export function AdminTopbar() {
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-full pr-1 pl-1">
             <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground">
-              AM
+              {initials || "?"}
             </span>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Admin Merchant</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>
+              <p className="truncate font-medium text-foreground">{adminName}</p>
+              <p className="truncate text-xs font-normal text-muted-foreground">{adminEmail}</p>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/admin/settings" />}>Settings</DropdownMenuItem>
-            <DropdownMenuItem render={<Link href="/" />}>Exit Admin</DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/admin/settings" />}>Configurações</DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/" />}>Voltar à loja</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <form action={logoutAction}>
+              <DropdownMenuItem render={<button type="submit" className="w-full text-left" />}>
+                Sair
+              </DropdownMenuItem>
+            </form>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

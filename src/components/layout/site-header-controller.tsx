@@ -2,6 +2,6 @@
 
 import { SiteHeader } from "@/components/layout/header";
 
-export function SiteHeaderController() {
-  return <SiteHeader transparent={false} />;
+export function SiteHeaderController({ userDisplayName }: { userDisplayName: string | null }) {
+  return <SiteHeader transparent={false} userDisplayName={userDisplayName} />;
 }
