@@ -86,24 +86,31 @@ function childWrites(data: ProductFormValues) {
     },
     variants: {
       create: data.variants.map((variant, index) => ({
-        sku: variant.sku,
-        volumeMl: variant.volumeMl,
-        priceCents: fromReais(variant.priceReais),
-        compareAtPriceCents: toCentsOrNull(variant.compareAtPriceReais),
-        weightGrams: variant.weightGrams,
-        lengthMm: variant.lengthMm,
-        widthMm: variant.widthMm,
-        heightMm: variant.heightMm,
-        availabilityType: variant.availabilityType,
-        allowBackorder: variant.allowBackorder,
-        productionLeadTimeDays: variant.productionLeadTimeDays,
-        ean: variant.ean,
-        batchCode: variant.batchCode,
-        isActive: variant.isActive,
-        position: index,
+        ...variantScalars(variant, index),
         inventory: { create: { onHand: variant.initialOnHand } },
       })),
     },
+  };
+}
+
+/** Scalar (non-relational) columns of a variant, shared by create and update. */
+function variantScalars(variant: ProductFormValues["variants"][number], position: number) {
+  return {
+    sku: variant.sku,
+    volumeMl: variant.volumeMl,
+    priceCents: fromReais(variant.priceReais),
+    compareAtPriceCents: toCentsOrNull(variant.compareAtPriceReais),
+    weightGrams: variant.weightGrams,
+    lengthMm: variant.lengthMm,
+    widthMm: variant.widthMm,
+    heightMm: variant.heightMm,
+    availabilityType: variant.availabilityType,
+    allowBackorder: variant.allowBackorder,
+    productionLeadTimeDays: variant.productionLeadTimeDays,
+    ean: variant.ean,
+    batchCode: variant.batchCode,
+    isActive: variant.isActive,
+    position,
   };
 }
 
@@ -169,8 +176,35 @@ export async function createProduct(input: unknown): Promise<ProductActionResult
   try {
     const created = await prisma.product.create({
       data: { ...productScalars({ ...data, slug }), ...childWrites(data) },
-      select: { id: true },
+      select: {
+        id: true,
+        variants: { select: { id: true, inventory: { select: { id: true, onHand: true } } } },
+      },
     });
+
+    // Nested writes create the Inventory row directly with `onHand` set, but
+    // never a matching ledger entry — every unit of stock must trace back to
+    // a movement (see inventory-actions.ts). This is that entry for whatever
+    // stock the operator declared when creating the product.
+    const initialMovements = created.variants
+      .filter((variant) => variant.inventory && variant.inventory.onHand > 0)
+      .map((variant) =>
+        prisma.inventoryMovement.create({
+          data: {
+            inventoryId: variant.inventory!.id,
+            type: "PURCHASE",
+            quantityDelta: variant.inventory!.onHand,
+            onHandAfter: variant.inventory!.onHand,
+            reservedAfter: 0,
+            referenceType: "product_creation",
+            reason: "Estoque inicial informado na criação do produto",
+          },
+        })
+      );
+
+    if (initialMovements.length > 0) {
+      await prisma.$transaction(initialMovements);
+    }
 
     await writeAuditLog({
       action: "product.create",
@@ -179,6 +213,7 @@ export async function createProduct(input: unknown): Promise<ProductActionResult
     });
 
     revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
     return { success: true, productId: created.id };
   } catch (error) {
     return { success: false, formError: describeError(error) };
@@ -202,19 +237,83 @@ export async function updateProduct(input: unknown): Promise<ProductActionResult
   });
   if (!before) return { success: false, formError: "Produto não encontrado" };
 
+  // Images/families/notes/collections carry no history worth preserving, so
+  // they are still replaced wholesale. Variants are different: each one owns
+  // an Inventory row and an append-only movement ledger (see
+  // inventory-actions.ts). Deleting and recreating a variant on every save
+  // would cascade-delete that ledger and silently erase stock history, so
+  // existing variants (submitted with an `id`) are updated in place; only
+  // genuinely new ones are created, and only removed ones are deleted.
+  const existingVariantIds = new Set(
+    (await prisma.productVariant.findMany({ where: { productId: data.id }, select: { id: true } })).map(
+      (v) => v.id
+    )
+  );
+  const submittedVariantIds = new Set(data.variants.map((v) => v.id).filter(Boolean) as string[]);
+  const variantIdsToDelete = [...existingVariantIds].filter((id) => !submittedVariantIds.has(id));
+
   try {
     await prisma.$transaction([
-      // Child collections are replaced wholesale (see childWrites' comment).
-      prisma.productVariant.deleteMany({ where: { productId: data.id } }),
       prisma.productImage.deleteMany({ where: { productId: data.id } }),
       prisma.productFragranceFamily.deleteMany({ where: { productId: data.id } }),
       prisma.productFragranceNote.deleteMany({ where: { productId: data.id } }),
       prisma.productCollection.deleteMany({ where: { productId: data.id } }),
+      ...(variantIdsToDelete.length > 0
+        ? [prisma.productVariant.deleteMany({ where: { id: { in: variantIdsToDelete } } })]
+        : []),
       prisma.product.update({
         where: { id: data.id },
-        data: { ...productScalars(data), ...childWrites(data) },
+        data: {
+          ...productScalars(data),
+          images: childWrites(data).images,
+          families: childWrites(data).families,
+          notes: childWrites(data).notes,
+          collections: childWrites(data).collections,
+        },
       }),
+      ...data.variants.map((variant, index) =>
+        variant.id && existingVariantIds.has(variant.id)
+          ? prisma.productVariant.update({
+            where: { id: variant.id },
+            data: variantScalars(variant, index),
+          })
+          : prisma.productVariant.create({
+            data: {
+              ...variantScalars(variant, index),
+              productId: data.id!,
+              inventory: { create: { onHand: variant.initialOnHand } },
+            },
+          })
+      ),
     ]);
+
+    // New variants created above need their initial stock's matching ledger
+    // entry, same as createProduct — a nested/plain create sets onHand
+    // directly with no movement to explain it otherwise.
+    const newVariantsWithStock = data.variants.filter(
+      (v) => (!v.id || !existingVariantIds.has(v.id)) && v.initialOnHand > 0
+    );
+    if (newVariantsWithStock.length > 0) {
+      const createdInventories = await prisma.inventory.findMany({
+        where: { variant: { productId: data.id, sku: { in: newVariantsWithStock.map((v) => v.sku) } } },
+        select: { id: true, onHand: true, variant: { select: { sku: true } } },
+      });
+      await prisma.$transaction(
+        createdInventories.map((inv) =>
+          prisma.inventoryMovement.create({
+            data: {
+              inventoryId: inv.id,
+              type: "PURCHASE",
+              quantityDelta: inv.onHand,
+              onHandAfter: inv.onHand,
+              reservedAfter: 0,
+              referenceType: "product_creation",
+              reason: "Estoque inicial informado ao adicionar a variante",
+            },
+          })
+        )
+      );
+    }
 
     const changes: AuditChanges = {};
     if (before.name !== data.name) changes.name = { before: before.name, after: data.name };
