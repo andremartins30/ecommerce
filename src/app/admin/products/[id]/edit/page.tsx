@@ -1,30 +1,12 @@
-"use client";
-
-import { use } from "react";
-import { useAdminProductsStore } from "@/store/admin-products-store";
-import { useHydrated } from "@/hooks/use-hydrated";
+import { notFound } from "next/navigation";
 import { ProductForm } from "@/components/admin/product-form";
-import { EmptyState } from "@/components/common/empty-state";
-import { PackageX } from "lucide-react";
+import { getProductByIdForAdmin, getProductFormOptions } from "@/server/services/admin/product-queries";
 
-export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const hydrated = useHydrated();
-  const product = useAdminProductsStore((s) => s.getById(id));
+export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const [product, options] = await Promise.all([getProductByIdForAdmin(id), getProductFormOptions()]);
 
-  if (!hydrated) return null;
+  if (!product) notFound();
 
-  if (!product) {
-    return (
-      <EmptyState
-        icon={PackageX}
-        title="Product not found"
-        description="This product may have been deleted."
-        actionLabel="Back to Products"
-        actionHref="/admin/products"
-      />
-    );
-  }
-
-  return <ProductForm key={product.id} product={product} />;
+  return <ProductForm key={product.id} product={product} options={options} />;
 }

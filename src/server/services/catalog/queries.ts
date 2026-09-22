@@ -11,7 +11,7 @@ import type { Category, ProductDetail, ProductSummary, ProductVariant } from "@/
  * own database.
  */
 
-const productInclude = {
+export const productInclude = {
   brand: { select: { id: true, slug: true, name: true, countryCode: true } },
   category: { select: { id: true, slug: true, name: true } },
   concentration: { select: { id: true, slug: true, name: true, abbreviation: true } },
@@ -30,7 +30,7 @@ const productInclude = {
   },
 } as const;
 
-const productDetailInclude = {
+export const productDetailInclude = {
   ...productInclude,
   notes: {
     include: { note: { select: { id: true, slug: true, name: true } } },
@@ -366,6 +366,22 @@ export async function listConcentrations() {
     where: { isActive: true },
     orderBy: { position: "asc" },
     select: { id: true, slug: true, name: true, abbreviation: true },
+  });
+}
+
+export async function listFragranceNotes() {
+  return prisma.fragranceNote.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, slug: true, name: true },
+  });
+}
+
+export async function listCollections() {
+  return prisma.collection.findMany({
+    where: { isActive: true },
+    orderBy: { position: "asc" },
+    select: { id: true, slug: true, name: true },
   });
 }
 
