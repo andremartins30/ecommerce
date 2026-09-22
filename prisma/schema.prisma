@@ -1,0 +1,1721 @@
+// Perfumery catalogue.
+//
+// Conventions that apply to the whole schema:
+//
+// - Money is always an integer number of cents, never Float. Field names carry
+//   the unit (`priceCents`) so a wrong value is visible at the call site.
+// - Physical dimensions are integers in millimetres and grams, for the same
+//   reason: shipping quotes must not depend on float rounding.
+// - CHECK constraints live in the migration SQL, since Prisma's schema language
+//   cannot express them. Invariants belong in the database, not only in the
+//   application.
+// - Lead times are nullable at product and variant level on purpose: null means
+//   "inherit", and the resolution order is
+//   variant -> product -> store setting -> 15.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/server/db/generated"
+}
+
+// Prisma 7 no longer accepts the connection URL here: migrations read it from
+// prisma.config.ts and the client receives a driver adapter.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Commercial classification of the product.
+enum ProductType {
+  CONTRATIPO
+  IMPORTADO
+  NICHO
+  OUTRO
+}
+
+/// How a variant can be sold. The critical rule of this catalogue:
+/// `onHand = 0` does NOT imply unavailable — a MADE_TO_ORDER variant with no
+/// stock is perfectly sellable and creates production demand.
+enum AvailabilityType {
+  READY_STOCK
+  MADE_TO_ORDER
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+/// Position in the olfactory pyramid. A note may legitimately appear in more
+/// than one position of the same fragrance.
+enum NotePosition {
+  TOP
+  HEART
+  BASE
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum Gender {
+  MASCULINO
+  FEMININO
+  UNISSEX
+}
+
+enum Occasion {
+  DIA_A_DIA
+  TRABALHO
+  NOITE
+  FESTA
+  ENCONTRO
+  ESPORTE
+  ESPECIAL
+}
+
+enum Season {
+  VERAO
+  OUTONO
+  INVERNO
+  PRIMAVERA
+}
+
+/// Data type of a SystemSetting value, so the reader knows how to parse it.
+enum SettingType {
+  STRING
+  INTEGER
+  BOOLEAN
+  JSON
+}
+
+// ---------------------------------------------------------------------------
+// Store configuration
+// ---------------------------------------------------------------------------
+
+/// Operator-editable configuration. Holds the store identity (so no commercial
+/// name is ever hardcoded), the default production lead time, the shipment
+/// policy and the contratipo legal disclaimer.
+model SystemSetting {
+  key         String      @id
+  value       String
+  type        SettingType @default(STRING)
+  group       String      @default("general")
+  label       String
+  description String?
+  updatedAt   DateTime    @updatedAt
+  updatedById String?
+
+  @@index([group])
+  @@map("system_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Taxonomy
+// ---------------------------------------------------------------------------
+
+model Brand {
+  id          String   @id @default(uuid(7))
+  slug        String   @unique
+  name        String
+  description String?
+  logoUrl     String?
+  /// ISO 3166-1 alpha-2, e.g. "FR". Relevant for imported and niche lines.
+  countryCode String?
+  isActive    Boolean  @default(true)
+  seoTitle    String?
+  seoDesc     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@index([isActive])
+  @@map("brands")
+}
+
+/// Hierarchical catalogue taxonomy (Contratipos, Importados, Nicho and their
+/// children). A product belongs to exactly one category for breadcrumbs and
+/// canonical URLs; looser groupings are Collections.
+model Category {
+  id          String   @id @default(uuid(7))
+  slug        String   @unique
+  name        String
+  description String?
+  imageUrl    String?
+  parentId    String?
+  position    Int      @default(0)
+  isActive    Boolean  @default(true)
+  seoTitle    String?
+  seoDesc     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@index([isActive, position])
+  @@map("categories")
+}
+
+/// Merchandising groupings that cut across categories: Masculinos, Femininos,
+/// Unissex, Lançamentos, Mais vendidos, Pronta entrega.
+model Collection {
+  id          String   @id @default(uuid(7))
+  slug        String   @unique
+  name        String
+  description String?
+  imageUrl    String?
+  position    Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products ProductCollection[]
+
+  @@index([isActive, position])
+  @@map("collections")
+}
+
+/// Eau de Parfum, Extrait, Body Splash and so on. An entity rather than an enum
+/// because the operator must be able to add one without a deploy.
+model Concentration {
+  id           String   @id @default(uuid(7))
+  slug         String   @unique
+  name         String
+  abbreviation String?
+  description  String?
+  /// Typical aromatic compound percentage, for reference only.
+  minPercent   Int?
+  maxPercent   Int?
+  position     Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  products Product[]
+
+  @@index([isActive, position])
+  @@map("concentrations")
+}
+
+/// Olfactory family, with optional subfamilies. A fragrance may belong to more
+/// than one.
+model FragranceFamily {
+  id          String   @id @default(uuid(7))
+  slug        String   @unique
+  name        String
+  description String?
+  imageUrl    String?
+  /// Hex colour used by the family filter chips.
+  colorHex    String?
+  parentId    String?
+  position    Int      @default(0)
+  isActive    Boolean  @default(true)
+  seoTitle    String?
+  seoDesc     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   FragranceFamily?        @relation("FamilyTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children FragranceFamily[]       @relation("FamilyTree")
+  products ProductFragranceFamily[]
+
+  @@index([parentId])
+  @@index([isActive, position])
+  @@map("fragrance_families")
+}
+
+/// A single olfactory note. Its own entity so that notes can drive filters,
+/// per-note landing pages, SEO and recommendations later.
+model FragranceNote {
+  id          String   @id @default(uuid(7))
+  slug        String   @unique
+  name        String
+  description String?
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products ProductFragranceNote[]
+
+  @@index([isActive])
+  @@map("fragrance_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Product
+// ---------------------------------------------------------------------------
+
+model Product {
+  id     String        @id @default(uuid(7))
+  slug   String        @unique
+  name   String
+  status ProductStatus @default(DRAFT)
+
+  productType ProductType
+
+  brandId         String
+  categoryId      String
+  concentrationId String?
+
+  shortDescription String
+  description      String
+
+  gender    Gender     @default(UNISSEX)
+  occasions Occasion[] @default([])
+  seasons   Season[]   @default([])
+
+  /// ISO 3166-1 alpha-2 of where the fragrance is produced.
+  countryOfOrigin String?
+
+  /// Commercial performance information, shown only when filled in. Never
+  /// invented, and presented as an estimate rather than a guarantee.
+  longevity  String?
+  projection String?
+
+  // --- Contratipo reference -------------------------------------------------
+  // These describe the olfactory *reference*, never the product itself. The UI
+  // and the SEO metadata must keep that distinction explicit.
+  inspiredBy         String?
+  referenceBrand     String?
+  referenceFragrance String?
+  /// Overrides the store-wide legal disclaimer for this product.
+  disclaimerOverride String?
+
+  /// Null means inherit from the store setting. Level 2 of the lead time chain.
+  productionLeadTimeDays Int?
+
+  isFeatured   Boolean @default(false)
+  isBestSeller Boolean @default(false)
+  isNew        Boolean @default(false)
+
+  tags String[] @default([])
+
+  seoTitle String?
+  seoDesc  String?
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  brand         Brand          @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  category      Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  concentration Concentration? @relation(fields: [concentrationId], references: [id], onDelete: SetNull)
+
+  variants    ProductVariant[]
+  images      ProductImage[]
+  families    ProductFragranceFamily[]
+  notes       ProductFragranceNote[]
+  collections ProductCollection[]
+
+  @@index([status, publishedAt])
+  @@index([brandId])
+  @@index([categoryId])
+  @@index([productType])
+  @@index([isFeatured])
+  @@index([isBestSeller])
+  @@index([isNew])
+  @@map("products")
+}
+
+/// A sellable volume. Stock, price, weight, dimensions, availability and lead
+/// time all live here rather than on the product: 30 ml of a fragrance can be
+/// in stock while 50 ml of the same fragrance is made to order.
+model ProductVariant {
+  id        String @id @default(uuid(7))
+  productId String
+  sku       String @unique
+  volumeMl  Int
+
+  priceCents          Int
+  compareAtPriceCents Int?
+  /// Cost of goods. Never exposed to the storefront.
+  costPriceCents      Int?
+
+  weightGrams Int
+  lengthMm    Int
+  widthMm     Int
+  heightMm    Int
+
+  availabilityType AvailabilityType @default(READY_STOCK)
+
+  /// Allows selling beyond `onHand`, turning the excess into production demand.
+  /// This is what makes a hybrid variant possible: the first N units ship from
+  /// stock, the rest are made to order.
+  allowBackorder Boolean @default(false)
+
+  /// Null means inherit from the product. Level 1 of the lead time chain.
+  productionLeadTimeDays Int?
+
+  /// Optional retail barcode and production batch, for imported and niche lines.
+  ean       String?
+  batchCode String?
+
+  position  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory Inventory?
+
+  @@unique([productId, volumeMl])
+  @@index([productId, position])
+  @@index([availabilityType])
+  @@index([isActive])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id        String   @id @default(uuid(7))
+  productId String
+  url       String
+  alt       String
+  position  Int      @default(0)
+  isPrimary Boolean  @default(false)
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, position])
+  @@map("product_images")
+}
+
+model ProductFragranceFamily {
+  productId String
+  familyId  String
+  /// The family shown on cards and used as the canonical one for SEO.
+  isPrimary Boolean @default(false)
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  family  FragranceFamily @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@id([productId, familyId])
+  @@index([familyId])
+  @@map("product_fragrance_families")
+}
+
+model ProductFragranceNote {
+  productId String
+  noteId    String
+  position  NotePosition
+  /// Display order within the pyramid level.
+  sortOrder Int          @default(0)
+
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  note    FragranceNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  // A note can appear in more than one position, so position is part of the key.
+  @@id([productId, noteId, position])
+  @@index([noteId])
+  @@index([productId, position, sortOrder])
+  @@map("product_fragrance_notes")
+}
+
+model ProductCollection {
+  productId    String
+  collectionId String
+  position     Int    @default(0)
+
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([productId, collectionId])
+  @@index([collectionId, position])
+  @@map("product_collections")
+}
+
+// ===========================================================================
+// IDENTITY AND ACCESS
+// ===========================================================================
+
+/// One identity per person. The storefront profile (Customer) and the staff
+/// profile (AdminUser) hang off it, so there is a single authentication path and
+/// a single password policy rather than two parallel login systems.
+model User {
+  id String @id @default(uuid(7))
+
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  /// Argon2id hash. The plaintext password never leaves the request handler.
+  passwordHash  String
+  passwordUpdatedAt DateTime @default(now())
+
+  /// TOTP shared secret, encrypted at rest. Null until MFA is enrolled.
+  mfaSecret       String?
+  mfaEnabledAt    DateTime?
+  /// Hashed single-use recovery codes.
+  mfaRecoveryCodes String[] @default([])
+
+  /// Brute-force throttling state. Reset on a successful login.
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+
+  lastLoginAt DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  customer  Customer?
+  adminUser AdminUser?
+
+  sessions               Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens    PasswordResetToken[]
+  auditLogs              AuditLog[]
+
+  @@index([isActive])
+  @@map("users")
+}
+
+/// Server-side session. The cookie carries an opaque token; only its hash is
+/// stored, so a database leak does not hand out live sessions.
+model Session {
+  id        String @id @default(uuid(7))
+  userId    String
+  tokenHash String @unique
+
+  /// Elevated window for sensitive admin operations (refunds, permission
+  /// changes). Re-authentication pushes this forward.
+  reauthenticatedAt DateTime?
+  /// True once the TOTP step of this session has been satisfied.
+  mfaSatisfied      Boolean   @default(false)
+
+  ipAddress  String?
+  userAgent  String?
+  lastUsedAt DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid(7))
+  userId    String
+  tokenHash String   @unique
+  email     String
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid(7))
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  consumedAt DateTime?
+  requestedIp String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  SALES
+  INVENTORY
+  PRODUCTION
+  FINANCE
+  SUPPORT
+  MARKETING
+}
+
+model Role {
+  id          String   @id @default(uuid(7))
+  name        RoleName @unique
+  label       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  permissions RolePermission[]
+  admins      AdminUserRole[]
+
+  @@map("roles")
+}
+
+/// Granular permission, e.g. "inventory.write". Authorisation is always checked
+/// on the server; hiding a menu item is presentation, not protection.
+model Permission {
+  id          String   @id @default(uuid(7))
+  key         String   @unique
+  label       String
+  description String?
+  group       String
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@index([group])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model AdminUser {
+  id     String @id @default(uuid(7))
+  userId String @unique
+  name   String
+
+  /// MFA is mandatory for staff; this records when it was enforced.
+  mfaRequired Boolean @default(true)
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles AdminUserRole[]
+
+  @@map("admin_users")
+}
+
+model AdminUserRole {
+  adminUserId String
+  roleId      String
+  grantedAt   DateTime @default(now())
+  grantedById String?
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([adminUserId, roleId])
+  @@index([roleId])
+  @@map("admin_user_roles")
+}
+
+// ===========================================================================
+// CUSTOMERS
+// ===========================================================================
+
+enum DocumentType {
+  CPF
+  CNPJ
+}
+
+/// The 27 Brazilian federative units.
+enum BrazilianState {
+  AC
+  AL
+  AP
+  AM
+  BA
+  CE
+  DF
+  ES
+  GO
+  MA
+  MT
+  MS
+  MG
+  PA
+  PB
+  PR
+  PE
+  PI
+  RJ
+  RN
+  RS
+  RO
+  RR
+  SC
+  SP
+  SE
+  TO
+}
+
+model Customer {
+  id     String @id @default(uuid(7))
+  userId String @unique
+
+  name  String
+  /// Digits only, no mask. Validated for check digits before being stored.
+  phone String?
+
+  documentType DocumentType?
+  /// Digits only. Required by the fiscal provider when an invoice is issued.
+  document     String?       @unique
+
+  birthDate DateTime?
+
+  acceptsMarketing Boolean @default(false)
+
+  /// Set when a privacy erasure request is fulfilled. Personal fields are
+  /// overwritten but the row survives, because order and invoice history has a
+  /// legal retention period of its own.
+  anonymizedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses CustomerAddress[]
+  carts     Cart[]
+  orders    Order[]
+  reviews   Review[]
+  wishlist  WishlistItem[]
+  consents  PrivacyConsent[]
+  privacyRequests PrivacyRequest[]
+
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id         String @id @default(uuid(7))
+  customerId String
+
+  label      String
+  recipient  String
+  /// Digits only (8), no mask.
+  postalCode String
+  street     String
+  number     String
+  complement String?
+  district   String
+  city       String
+  state      BrazilianState
+  country    String         @default("BR")
+  phone      String?
+
+  isDefaultShipping Boolean @default(false)
+  isDefaultBilling  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+model WishlistItem {
+  id         String   @id @default(uuid(7))
+  customerId String
+  productId  String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, productId])
+  @@index([productId])
+  @@map("wishlist_items")
+}
+
+// ===========================================================================
+// INVENTORY
+// ===========================================================================
+
+/// Stock for one variant.
+///
+/// `available` is never stored: it is always `onHand - reserved`. Persisting a
+/// derived value is how stock counts drift apart under concurrency.
+model Inventory {
+  id        String @id @default(uuid(7))
+  variantId String @unique
+
+  onHand   Int @default(0)
+  reserved Int @default(0)
+
+  lowStockThreshold Int @default(3)
+
+  updatedAt DateTime @updatedAt
+
+  /// A real foreign key, not just a unique column: stock for a variant that does
+  /// not exist is meaningless, and deleting the variant must take its stock with
+  /// it.
+  variant      ProductVariant         @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  movements    InventoryMovement[]
+  reservations InventoryReservation[]
+
+  @@map("inventories")
+}
+
+enum InventoryMovementType {
+  PURCHASE
+  PRODUCTION
+  SALE
+  RESERVATION
+  RELEASE
+  RETURN
+  ADJUSTMENT
+  LOSS
+}
+
+/// Append-only stock ledger. Rows are never updated or deleted: the history is
+/// the audit trail. `onHandAfter` and `reservedAfter` snapshot the running
+/// balance so a discrepancy can be traced to the exact movement.
+model InventoryMovement {
+  id          String                @id @default(uuid(7))
+  inventoryId String
+  type        InventoryMovementType
+
+  /// Signed delta. Never zero.
+  quantityDelta Int
+  onHandAfter   Int
+  reservedAfter Int
+
+  /// What caused the movement: "order", "production_task", "manual", ...
+  referenceType String?
+  referenceId   String?
+  /// Mandatory for manual adjustments and losses.
+  reason        String?
+
+  actorUserId String?
+  createdAt   DateTime @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("inventory_movements")
+}
+
+enum ReservationStatus {
+  ACTIVE
+  COMMITTED
+  RELEASED
+  EXPIRED
+}
+
+/// A hold on stock while payment is pending.
+///
+/// `idempotencyKey` is unique so that a retried checkout or a redelivered
+/// webhook cannot reserve the same units twice.
+model InventoryReservation {
+  id          String            @id @default(uuid(7))
+  inventoryId String
+  quantity    Int
+  status      ReservationStatus @default(ACTIVE)
+
+  idempotencyKey String @unique
+
+  orderId String?
+  cartId  String?
+
+  expiresAt   DateTime
+  committedAt DateTime?
+  releasedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  order     Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryId, status])
+  @@index([status, expiresAt])
+  @@index([orderId])
+  @@map("inventory_reservations")
+}
+
+// ===========================================================================
+// CART
+// ===========================================================================
+
+/// Server-side cart. Anonymous visitors get one keyed by session token; it is
+/// merged into the customer's cart on login.
+model Cart {
+  id         String  @id @default(uuid(7))
+  customerId String?
+  /// Opaque token for anonymous carts.
+  sessionKey String? @unique
+
+  couponCode String?
+
+  /// Abandoned carts are cleaned up after this point.
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    CartItem[]
+
+  @@index([customerId])
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+/// A cart line holds only *what* and *how many*. Price is deliberately absent:
+/// it is resolved from the variant on every read, so a stale or tampered amount
+/// can never reach checkout.
+model CartItem {
+  id        String @id @default(uuid(7))
+  cartId    String
+  variantId String
+  quantity  Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, variantId])
+  @@index([variantId])
+  @@map("cart_items")
+}
+
+// ===========================================================================
+// ORDERS
+// ===========================================================================
+
+enum OrderStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PAID
+  WAITING_PRODUCTION
+  IN_PRODUCTION
+  PRODUCTION_COMPLETED
+  READY_TO_SHIP
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+/// How a mixed order is dispatched. SINGLE_SHIPMENT is the default: the whole
+/// order ships once every item is ready. SPLIT_SHIPMENT exists in the model so
+/// it can be enabled later without reshaping the schema.
+enum ShipmentPolicy {
+  SINGLE_SHIPMENT
+  SPLIT_SHIPMENT
+}
+
+model Order {
+  id     String      @id @default(uuid(7))
+  /// Human-facing sequential reference, generated server-side.
+  number String      @unique
+  status OrderStatus @default(PENDING)
+
+  customerId String
+  addressId  String?
+
+  /// Contact details are snapshotted: the order must remain readable even if the
+  /// customer later changes or erases their profile.
+  email String
+  phone String?
+  customerNameSnapshot String
+  documentSnapshot     String?
+
+  /// Shipping address snapshot, for the same reason.
+  shippingRecipient  String
+  shippingPostalCode String
+  shippingStreet     String
+  shippingNumber     String
+  shippingComplement String?
+  shippingDistrict   String
+  shippingCity       String
+  shippingState      BrazilianState
+  shippingCountry    String         @default("BR")
+
+  subtotalCents Int
+  discountCents Int @default(0)
+  shippingCents Int @default(0)
+  totalCents    Int
+
+  couponCode String?
+
+  shipmentPolicy ShipmentPolicy @default(SINGLE_SHIPMENT)
+
+  /// The delivery promise as made at purchase time. Never recomputed from
+  /// current settings — the customer is owed what they were shown.
+  promisedProductionDays Int  @default(0)
+  promisedHandlingDays   Int  @default(0)
+  promisedTransitMinDays Int?
+  promisedTransitMaxDays Int?
+  estimatedDispatchAt    DateTime?
+  estimatedDeliveryAt    DateTime?
+
+  placedAt    DateTime  @default(now())
+  paidAt      DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  customer Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  address  CustomerAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  items        OrderItem[]
+  statusHistory OrderStatusHistory[]
+  payments     Payment[]
+  refunds      Refund[]
+  shipments    Shipment[]
+  invoices     Invoice[]
+  reservations InventoryReservation[]
+  reviews      Review[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([placedAt])
+  @@map("orders")
+}
+
+/// Immutable purchase snapshot.
+///
+/// Every field a receipt, an invoice or a customer service conversation needs is
+/// copied here at purchase time. Editing the product afterwards must never
+/// rewrite history.
+///
+/// `qtyFromStock` + `qtyBackordered` always equals `quantity`: this is what
+/// represents a hybrid line where part ships immediately and part is produced.
+model OrderItem {
+  id        String @id @default(uuid(7))
+  orderId   String
+  productId String
+  variantId String
+
+  nameSnapshot     String
+  brandSnapshot    String
+  skuSnapshot      String
+  volumeMlSnapshot Int
+  imageSnapshot    String?
+  productTypeSnapshot ProductType
+
+  unitPriceCents Int
+  discountCents  Int @default(0)
+  quantity       Int
+
+  availabilityTypeSnapshot       AvailabilityType
+  productionLeadTimeDaysSnapshot Int
+  qtyFromStock                   Int @default(0)
+  qtyBackordered                 Int @default(0)
+
+  estimatedProductionReadyAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productionTasks ProductionTask[]
+  shipmentItems   ShipmentItem[]
+
+  @@index([orderId])
+  @@index([variantId])
+  @@map("order_items")
+}
+
+/// Append-only status trail. The customer-facing timeline is derived from this,
+/// never from a mutable field.
+model OrderStatusHistory {
+  id     String      @id @default(uuid(7))
+  orderId String
+  status OrderStatus
+
+  note        String?
+  actorUserId String?
+  /// True when the transition was made by a background job or webhook.
+  automated   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+// ===========================================================================
+// PRODUCTION
+// ===========================================================================
+
+enum ProductionStatus {
+  WAITING_PRODUCTION
+  IN_PRODUCTION
+  PRODUCTION_COMPLETED
+  CANCELLED
+}
+
+/// Production demand created from the backordered part of an order item.
+///
+/// `promisedLeadTimeDays` and `estimatedProductionReadyAt` are frozen at
+/// purchase time. OVERDUE is derived (`now > estimatedProductionReadyAt` and
+/// `productionCompletedAt IS NULL`), never stored, so it cannot go stale.
+model ProductionTask {
+  id          String           @id @default(uuid(7))
+  orderItemId String
+  quantity    Int
+  status      ProductionStatus @default(WAITING_PRODUCTION)
+
+  promisedLeadTimeDays       Int
+  estimatedProductionReadyAt DateTime
+
+  productionStartedAt   DateTime?
+  productionCompletedAt DateTime?
+  cancelledAt           DateTime?
+
+  /// True when the finished units were added to free stock instead of being
+  /// allocated to this order.
+  producedToStock Boolean @default(false)
+
+  assignedToUserId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  orderItem OrderItem        @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  notes     ProductionNote[]
+
+  @@index([status, estimatedProductionReadyAt])
+  @@index([orderItemId])
+  @@map("production_tasks")
+}
+
+/// Internal note, never shown to the customer.
+model ProductionNote {
+  id               String   @id @default(uuid(7))
+  productionTaskId String
+  body             String
+  authorUserId     String?
+  createdAt        DateTime @default(now())
+
+  task ProductionTask @relation(fields: [productionTaskId], references: [id], onDelete: Cascade)
+
+  @@index([productionTaskId, createdAt])
+  @@map("production_notes")
+}
+
+// ===========================================================================
+// PAYMENTS
+// ===========================================================================
+
+enum PaymentMethodKind {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  BOLETO
+}
+
+enum PaymentStatus {
+  PENDING
+  AWAITING_CONFIRMATION
+  AUTHORIZED
+  PAID
+  REFUSED
+  EXPIRED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+/// A payment attempt against an order.
+///
+/// Card data is never stored: only the provider token, the brand and the last
+/// four digits. There is deliberately no column that could hold a PAN or a CVV.
+model Payment {
+  id      String @id @default(uuid(7))
+  orderId String
+
+  provider String
+  method   PaymentMethodKind
+  status   PaymentStatus     @default(PENDING)
+
+  amountCents Int
+
+  /// Guards against double-charging on retry.
+  idempotencyKey    String  @unique
+  providerPaymentId String?
+
+  // --- PIX ------------------------------------------------------------------
+  pixQrCode     String?
+  pixCopyPaste  String?
+  pixExpiresAt  DateTime?
+
+  // --- Card (tokenised) -----------------------------------------------------
+  cardToken String?
+  cardBrand String?
+  cardLast4 String?
+  installments Int?
+
+  // --- Boleto ---------------------------------------------------------------
+  boletoUrl      String?
+  boletoBarcode  String?
+  boletoExpiresAt DateTime?
+
+  authorizedAt DateTime?
+  paidAt       DateTime?
+  refusedAt    DateTime?
+  refusalReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order        Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  transactions PaymentTransaction[]
+  refunds      Refund[]
+
+  @@index([orderId])
+  @@index([status])
+  @@index([providerPaymentId])
+  @@map("payments")
+}
+
+/// Raw provider interaction log, for reconciliation. Payloads are redacted
+/// before being written.
+model PaymentTransaction {
+  id        String @id @default(uuid(7))
+  paymentId String
+
+  kind          String
+  status        String
+  amountCents   Int?
+  providerRef   String?
+  requestPayload  String?
+  responsePayload String?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId, createdAt])
+  @@map("payment_transactions")
+}
+
+enum RefundStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Refund {
+  id        String       @id @default(uuid(7))
+  orderId   String
+  paymentId String?
+  status    RefundStatus @default(REQUESTED)
+
+  amountCents Int
+  reason      String
+
+  idempotencyKey   String  @unique
+  providerRefundId String?
+
+  requestedByUserId String?
+  requestedAt       DateTime  @default(now())
+  completedAt       DateTime?
+  failureReason     String?
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([status])
+  @@map("refunds")
+}
+
+// ===========================================================================
+// LOGISTICS
+// ===========================================================================
+
+enum ShipmentStatus {
+  PENDING
+  LABEL_CREATED
+  DISPATCHED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  RETURNED
+  LOST
+}
+
+model Shipment {
+  id      String         @id @default(uuid(7))
+  orderId String
+  status  ShipmentStatus @default(PENDING)
+
+  provider     String
+  serviceName  String
+  trackingCode String?
+  trackingUrl  String?
+  labelUrl     String?
+
+  costCents Int?
+
+  weightGrams Int?
+
+  /// Carrier transit estimate, in days. Stored separately from the production
+  /// lead time and never conflated with it.
+  transitMinDays Int?
+  transitMaxDays Int?
+
+  dispatchedAt DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items  ShipmentItem[]
+  events TrackingEvent[]
+
+  @@index([orderId])
+  @@index([status])
+  @@index([trackingCode])
+  @@map("shipments")
+}
+
+/// Which order items travel in which shipment. Needed the moment
+/// SPLIT_SHIPMENT is switched on.
+model ShipmentItem {
+  id          String @id @default(uuid(7))
+  shipmentId  String
+  orderItemId String
+  quantity    Int
+
+  shipment  Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, orderItemId])
+  @@index([orderItemId])
+  @@map("shipment_items")
+}
+
+model TrackingEvent {
+  id         String @id @default(uuid(7))
+  shipmentId String
+
+  status      String
+  description String
+  location    String?
+  occurredAt  DateTime
+  /// Provider event id, to make redelivered webhooks idempotent.
+  providerEventId String?
+  createdAt   DateTime @default(now())
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, providerEventId])
+  @@index([shipmentId, occurredAt])
+  @@map("tracking_events")
+}
+
+// ===========================================================================
+// FISCAL
+// ===========================================================================
+
+enum InvoiceStatus {
+  PENDING
+  PROCESSING
+  ISSUED
+  REJECTED
+  CANCELLED
+}
+
+model Invoice {
+  id      String        @id @default(uuid(7))
+  orderId String
+  status  InvoiceStatus @default(PENDING)
+
+  provider String
+
+  /// NF-e identifiers, populated once the authority accepts the document.
+  number      String?
+  series      String?
+  accessKey   String?  @unique
+  protocol    String?
+
+  xmlUrl   String?
+  danfeUrl String?
+
+  totalCents Int
+
+  /// Makes issuance idempotent per order.
+  idempotencyKey String @unique
+
+  issuedAt      DateTime?
+  cancelledAt   DateTime?
+  rejectionReason String?
+  attempts      Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@map("invoices")
+}
+
+// ===========================================================================
+// MARKETING
+// ===========================================================================
+
+enum CouponKind {
+  PERCENTAGE
+  FIXED
+  FREE_SHIPPING
+}
+
+model Coupon {
+  id   String     @id @default(uuid(7))
+  code String     @unique
+  kind CouponKind
+
+  /// Percent (0-100) for PERCENTAGE, cents for FIXED, ignored for FREE_SHIPPING.
+  value Int
+
+  minOrderCents Int?
+  /// Null means unlimited.
+  usageLimit      Int?
+  usagePerCustomer Int? @default(1)
+  usageCount      Int  @default(0)
+
+  startsAt  DateTime
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, startsAt, expiresAt])
+  @@map("coupons")
+}
+
+/// Catalogue-wide or segment promotions, kept separate from single-use coupon
+/// codes.
+model Promotion {
+  id          String   @id @default(uuid(7))
+  name        String
+  description String?
+  kind        CouponKind
+  value       Int
+  /// Scope selector, e.g. { "categoryIds": [...] }. Interpreted by the pricing
+  /// service, never by the UI.
+  scope       Json     @default("{}")
+  priority    Int      @default(0)
+  startsAt    DateTime
+  expiresAt   DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, startsAt, expiresAt])
+  @@map("promotions")
+}
+
+// ===========================================================================
+// REVIEWS
+// ===========================================================================
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A review is tied to a customer, and `orderId` is what backs the "verified
+/// purchase" badge — the badge is only shown when a matching order exists.
+model Review {
+  id         String       @id @default(uuid(7))
+  productId  String
+  customerId String
+  orderId    String?
+  status     ReviewStatus @default(PENDING)
+
+  rating  Int
+  title   String
+  body    String
+
+  helpfulCount Int @default(0)
+
+  moderatedByUserId String?
+  moderatedAt       DateTime?
+  moderationNote    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order    Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  // One review per customer per product.
+  @@unique([productId, customerId])
+  @@index([productId, status])
+  @@index([status])
+  @@map("reviews")
+}
+
+// ===========================================================================
+// NOTIFICATIONS AND JOBS
+// ===========================================================================
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  DEAD_LETTER
+}
+
+/// Operator-editable template. Keeping the copy in the database is what allows
+/// the production-delay wording to be corrected without a deploy.
+model NotificationTemplate {
+  id      String              @id @default(uuid(7))
+  key     String              @unique
+  channel NotificationChannel @default(EMAIL)
+  subject String
+  body    String
+  /// Variables the template accepts, for validation and for the admin editor.
+  variables String[]          @default([])
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  notifications Notification[]
+
+  @@map("notification_templates")
+}
+
+model Notification {
+  id         String              @id @default(uuid(7))
+  templateId String?
+  channel    NotificationChannel @default(EMAIL)
+  status     NotificationStatus  @default(QUEUED)
+
+  /// Recipient address. Masked in logs.
+  recipient String
+  subject   String
+  body      String
+
+  referenceType String?
+  referenceId   String?
+
+  attempts    Int       @default(0)
+  lastError   String?
+  scheduledAt DateTime  @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  template NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledAt])
+  @@index([referenceType, referenceId])
+  @@map("notifications")
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  DEAD_LETTER
+}
+
+/// Durable job queue, the database driver of QueueProvider. Real enough for
+/// production; swappable for SQS through the same interface.
+model QueueJob {
+  id      String    @id @default(uuid(7))
+  queue   String
+  kind    String
+  payload Json
+  status  JobStatus @default(PENDING)
+
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+  /// Exponential backoff target.
+  runAt       DateTime @default(now())
+  /// Set while a worker holds the job, so a second worker cannot take it.
+  lockedAt    DateTime?
+  lockedBy    String?
+
+  lastError   String?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// Deduplicates jobs enqueued more than once for the same cause.
+  idempotencyKey String? @unique
+
+  @@index([status, runAt])
+  @@index([queue, status])
+  @@map("queue_jobs")
+}
+
+// ===========================================================================
+// PRIVACY (LGPD)
+// ===========================================================================
+
+enum ConsentType {
+  COOKIES_ANALYTICS
+  COOKIES_MARKETING
+  MARKETING_EMAIL
+  TERMS_OF_USE
+  PRIVACY_POLICY
+}
+
+/// Versioned consent record. Stores what was agreed to, which version of the
+/// text, and the evidence.
+model PrivacyConsent {
+  id         String      @id @default(uuid(7))
+  customerId String?
+  /// For visitors who have not signed up.
+  sessionKey String?
+  type       ConsentType
+
+  granted        Boolean
+  /// Version of the policy text that was shown.
+  documentVersion String
+
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([customerId, type, createdAt])
+  @@index([sessionKey])
+  @@map("privacy_consents")
+}
+
+enum PrivacyRequestType {
+  ACCESS
+  CORRECTION
+  DELETION
+  PORTABILITY
+  OBJECTION
+}
+
+enum PrivacyRequestStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+model PrivacyRequest {
+  id         String               @id @default(uuid(7))
+  customerId String
+  type       PrivacyRequestType
+  status     PrivacyRequestStatus @default(OPEN)
+
+  message       String?
+  /// Legal justification when a request is refused or only partly fulfilled —
+  /// fiscal records, for instance, have their own retention period.
+  resolutionNote String?
+  exportUrl      String?
+
+  handledByUserId String?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([customerId])
+  @@map("privacy_requests")
+}
+
+// ===========================================================================
+// INTEGRATION AND AUDIT
+// ===========================================================================
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+  DEAD_LETTER
+}
+
+/// Every inbound webhook, stored before it is acted on.
+///
+/// `(provider, eventId)` is unique: that is what makes a redelivered payment
+/// approval process exactly once. `signatureValid` is recorded so a rejected
+/// delivery is still visible for investigation.
+model WebhookEvent {
+  id       String        @id @default(uuid(7))
+  provider String
+  eventId  String
+  eventType String
+  status   WebhookStatus @default(RECEIVED)
+
+  signatureValid Boolean
+  /// Provider timestamp, used to reject replays.
+  eventTimestamp DateTime?
+
+  payload Json
+
+  attempts    Int       @default(0)
+  lastError   String?
+  processedAt DateTime?
+  receivedAt  DateTime  @default(now())
+
+  @@unique([provider, eventId])
+  @@index([status, receivedAt])
+  @@index([eventType])
+  @@map("webhook_events")
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  WEBHOOK
+}
+
+/// Audit trail for anything that touches money, stock, availability, lead time,
+/// orders, refunds, invoices, permissions or settings.
+model AuditLog {
+  id        String         @id @default(uuid(7))
+  actorType AuditActorType @default(USER)
+  actorId   String?
+  /// Denormalised so the entry stays readable after a staff member is removed.
+  actorLabel String?
+
+  action     String
+  entityType String
+  entityId   String?
+
+  /// { field: { before, after } }. Secrets and card data are redacted before
+  /// this is written.
+  changes Json?
+
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
