@@ -12,6 +12,7 @@ import { QuantitySelector } from "@/components/product/quantity-selector";
 import { WishlistButton } from "@/components/product/wishlist-button";
 import { CompareButton } from "@/components/product/compare-button";
 import { AvailabilityTag } from "@/components/product/availability-tag";
+import { DeliveryPromiseNotice } from "@/components/product/delivery-promise-notice";
 import { Rating } from "@/components/common/rating";
 import { PriceDisplay } from "@/components/common/price-display";
 import { ReviewsSection } from "@/components/product/reviews-section";
@@ -23,10 +24,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { useVariantSelection } from "@/hooks/use-variant-selection";
+import { useDeliveryPromise } from "@/hooks/use-delivery-promise";
 import { useCartStore } from "@/store/cart-store";
 import { cn } from "@/lib/utils";
 import type { ProductSummary } from "@/lib/types";
+import type { ShipmentPolicy } from "@/server/domain/delivery/delivery-promise";
 
 const OCCASION_LABELS: Record<string, string> = {
   DIA_A_DIA: "Dia a dia",
@@ -49,16 +53,19 @@ export function ProductDetail({
   product,
   reviews,
   related,
+  shippingPolicy,
 }: {
   product: ProductDetailDto;
   reviews: ReviewDto[];
   related: ProductSummary[];
+  shippingPolicy: { handlingDays: number; shipmentPolicy: ShipmentPolicy };
 }) {
   const router = useRouter();
   const { variant, setVariantId, isReady, purchasable } = useVariantSelection(product);
   const [quantity, setQuantity] = useState(1);
   const [addState, setAddState] = useState<"idle" | "loading" | "added">("idle");
   const openCart = useCartStore((s) => s.open);
+  const deliveryDisclosure = useDeliveryPromise(variant, shippingPolicy);
 
   function handleAddToCart(buyNow = false) {
     if (!variant || !purchasable) return;
@@ -123,12 +130,16 @@ export function ProductDetail({
 
           {product.reference && (
             <div className="mt-4 max-w-md rounded-lg border border-border bg-muted/30 p-3.5 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">
-                Inspirado em {[product.reference.referenceBrand, product.reference.referenceFragrance]
-                  .filter(Boolean)
-                  .join(" — ")}
-              </p>
-              <p className="mt-1">{product.reference.disclaimer}</p>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Contratipo</Badge>
+                <p className="font-medium text-foreground">
+                  Inspirado em{" "}
+                  {[product.reference.referenceBrand, product.reference.referenceFragrance]
+                    .filter(Boolean)
+                    .join(" — ")}
+                </p>
+              </div>
+              <p className="mt-2">{product.reference.disclaimer}</p>
             </div>
           )}
 
@@ -136,12 +147,18 @@ export function ProductDetail({
             <VolumeSelector variants={product.variants} value={variant?.id} onChange={setVariantId} />
           </div>
 
-          {/* Availability sits directly above the CTA, never in an accordion:
-              it is the single fact most likely to decide the purchase. */}
+          {/* Availability and the delivery promise sit directly above the CTA,
+              never in an accordion: they are the facts most likely to decide
+              the purchase, and production is always shown apart from
+              transit. */}
           {variant && (
             <div className="mt-5">
               <AvailabilityTag availability={variant.availability} />
             </div>
+          )}
+
+          {deliveryDisclosure && (
+            <DeliveryPromiseNotice disclosure={deliveryDisclosure} className="mt-3" />
           )}
 
           <div className="mt-4 flex items-center gap-3">
@@ -208,30 +225,42 @@ export function ProductDetail({
             {hasPyramid && (
               <AccordionItem value="pyramid">
                 <AccordionTrigger className="text-sm font-medium">Pirâmide olfativa</AccordionTrigger>
-                <AccordionContent className="space-y-3 text-sm">
+                <AccordionContent className="space-y-4 text-sm">
                   {product.pyramid.top.length > 0 && (
-                    <p>
-                      <span className="text-foreground">Notas de saída: </span>
-                      <span className="text-muted-foreground">
-                        {product.pyramid.top.map((n) => n.name).join(", ")}
-                      </span>
-                    </p>
+                    <div>
+                      <p className="mb-2 text-foreground">Notas de saída</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {product.pyramid.top.map((note) => (
+                          <Badge key={note.id} variant="outline">
+                            {note.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   {product.pyramid.heart.length > 0 && (
-                    <p>
-                      <span className="text-foreground">Notas de coração: </span>
-                      <span className="text-muted-foreground">
-                        {product.pyramid.heart.map((n) => n.name).join(", ")}
-                      </span>
-                    </p>
+                    <div>
+                      <p className="mb-2 text-foreground">Notas de coração</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {product.pyramid.heart.map((note) => (
+                          <Badge key={note.id} variant="outline">
+                            {note.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   {product.pyramid.base.length > 0 && (
-                    <p>
-                      <span className="text-foreground">Notas de fundo: </span>
-                      <span className="text-muted-foreground">
-                        {product.pyramid.base.map((n) => n.name).join(", ")}
-                      </span>
-                    </p>
+                    <div>
+                      <p className="mb-2 text-foreground">Notas de fundo</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {product.pyramid.base.map((note) => (
+                          <Badge key={note.id} variant="outline">
+                            {note.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </AccordionContent>
               </AccordionItem>
