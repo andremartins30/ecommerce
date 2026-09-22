@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ShopView } from "@/components/shop/shop-view";
 import { ProductGridSkeleton } from "@/components/common/skeletons";
 import { listProducts, type ListProductsSort } from "@/server/services/catalog/queries";
+import { getFilterPanelOptions, parseShopSearchParams, type ShopSearchParams } from "@/server/services/catalog/filter-options";
 
 export const metadata: Metadata = {
   title: "Todos os perfumes",
@@ -12,22 +13,27 @@ export const metadata: Metadata = {
 export default async function ShopPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string; page?: string }>;
+  searchParams: Promise<ShopSearchParams>;
 }) {
-  const { sort, page } = await searchParams;
+  const params = await searchParams;
 
   return (
     <Suspense fallback={<div className="container-page py-10"><ProductGridSkeleton count={12} /></div>}>
-      <ShopContent sort={sort as ListProductsSort | undefined} page={page} />
+      <ShopContent params={params} />
     </Suspense>
   );
 }
 
-async function ShopContent({ sort, page }: { sort?: ListProductsSort; page?: string }) {
-  const result = await listProducts({
-    sort: sort ?? "featured",
-    page: page ? Number(page) : 1,
-  });
+async function ShopContent({ params }: { params: ShopSearchParams }) {
+  const filters = parseShopSearchParams(params);
+  const [result, filterOptions] = await Promise.all([
+    listProducts({
+      filters,
+      sort: (params.sort as ListProductsSort) ?? "featured",
+      page: params.page ? Number(params.page) : 1,
+    }),
+    getFilterPanelOptions(),
+  ]);
 
   return (
     <ShopView
@@ -36,6 +42,7 @@ async function ShopContent({ sort, page }: { sort?: ListProductsSort; page?: str
       products={result.items}
       page={result.page}
       totalPages={result.totalPages}
+      filterOptions={filterOptions}
     />
   );
 }

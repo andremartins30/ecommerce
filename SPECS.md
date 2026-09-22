@@ -4,11 +4,11 @@ Documento de referência rápida. Para o raciocínio arquitetural completo, ver
 `ARCHITECTURE.md`. Este arquivo responde duas perguntas: **o que existe hoje**
 e **onde ver cada coisa**.
 
-Estado geral: 10 de 35 tarefas concluídas. Banco de dados, regras de negócio e
+Estado geral: 11 de 35 tarefas concluídas. Banco de dados, regras de negócio e
 o **storefront público já estão ligados ao catálogo real de perfumaria no
-Postgres** — não é mais o template de moda com dados mock. Área de conta,
-checkout e painel admin ainda rodam sobre dados mock/localStorage; são
-migrados nas tarefas 14–24.
+Postgres**, agora com **filtros de faceta e busca reais** — não é mais o
+template de moda com dados mock. Área de conta, checkout e painel admin ainda
+rodam sobre dados mock/localStorage; são migrados nas tarefas 14–24.
 
 ---
 
@@ -56,6 +56,30 @@ Note que as rotas de produto e categoria mudaram de inglês para português:
 `/product/[slug]` → `/produto/[slug]`, `/categories/[slug]` →
 `/categorias/[slug]`.
 
+### 1.2.1 Filtros de faceta e busca — reais desde a Task 11
+
+`/shop` e `/categorias/[slug]` agora têm um painel de filtros de perfumaria
+(sidebar no desktop, gaveta no mobile) com facetas reais consultadas no
+banco: família olfativa, concentração, marca, volume (ml), disponibilidade
+(pronta entrega / sob encomenda), gênero, tipo de produto e faixa de preço.
+Cada faceta aceita múltipla seleção e tudo fica na URL — dá para copiar o
+link e compartilhar um filtro específico. Os filtros ativos aparecem como
+chips removíveis acima da grade de produtos.
+
+Exemplos de URL para testar:
+- `/shop?familia=amadeirado` — só perfumes da família amadeirada
+- `/shop?familia=amadeirado&genero=MASCULINO` — combinando duas facetas
+- `/shop?disponibilidade=READY_STOCK` — só pronta entrega
+- `/categorias/contratipos?volume=50` — categoria fixa + volume
+
+A busca (`/search?q=...` e o atalho `Ctrl+K`/ícone de lupa no cabeçalho)
+também usa o catálogo real agora. O dropdown de busca rápida do cabeçalho
+deixou de filtrar uma lista mock em memória e passou a chamar uma Server
+Action (`quickSearch`, em `src/server/services/catalog/actions.ts`) que
+reaproveita a mesma busca full-text-ish de `/search` — inclusive localizando
+contratipos pela fragrância de referência (buscar "Aventus" encontra tanto o
+importado original quanto qualquer contratipo inspirado nele).
+
 ### 1.3 O que NÃO foi migrado ainda (ainda mock/localStorage)
 
 - `/login`, `/register`, `/forgot-password` — autenticação simulada, sem senha
@@ -65,8 +89,6 @@ Note que as rotas de produto e categoria mudaram de inglês para português:
   produtos recomendados na home da conta, que já usa dados reais (Task 20/22)
 - `/admin/**` — painel inteiro ainda mock e **sem autenticação nenhuma**
   (⚠️ qualquer pessoa que acesse a URL entra; corrigido nas tarefas 16–18)
-- A busca rápida no cabeçalho (dropdown do ícone de lupa) ainda filtra a lista
-  mock local; a busca da página `/search` já é real. Unificação vem na Task 11.
 
 ### 1.4 Regras de negócio (domínio)
 
@@ -82,6 +104,9 @@ Arquivos-chave:
 - `src/server/domain/delivery/delivery-promise.ts` — produção e transporte nunca somados num único número
 - `src/server/domain/pricing/money.ts` — dinheiro em centavos
 - `src/server/services/catalog/queries.ts` / `mappers.ts` — consultas reais ao catálogo e conversão para os DTOs da tela
+- `src/server/services/catalog/filter-options.ts` — opções de faceta e parsing de filtros da URL, compartilhado entre `/shop` e `/categorias/[slug]`
+- `src/server/services/catalog/actions.ts` — Server Action da busca rápida do cabeçalho
+- `src/hooks/use-product-filters.ts` — estado de filtro/ordenação/paginação, com a URL como fonte da verdade
 
 ### 1.5 Testes automatizados
 
@@ -106,7 +131,6 @@ de dependência.
 
 | Fase | O que entrega |
 |---|---|
-| Filtros e busca de perfumaria (Task 11) | Facetas reais (família, concentração, volume, disponibilidade) e busca unificada |
 | Página de produto avançada (Task 12–13) | Pirâmide olfativa, disclaimer de contratipo, carrinho misto com prazos |
 | Admin de produtos (Task 14–15) | Cadastro de perfumes/variantes pelo painel, com permissão, auditoria e estoque real |
 | Autenticação real (Task 16–18) | Login com senha verdadeira (Argon2id + TOTP), `/admin` protegido, RBAC |

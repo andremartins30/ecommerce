@@ -80,10 +80,23 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
 
 export interface ListProductsFilters {
   categorySlug?: string;
+  /** Single-brand filter, kept for callers that only ever need one (e.g. a brand page). */
   brandSlug?: string;
+  /** Multi-select brand facet. Merged with `brandSlug` if both are given. */
+  brandSlugs?: string[];
+  /** Single-family filter, kept for callers that only ever need one. */
   familySlug?: string;
+  /** Multi-select fragrance family facet. Merged with `familySlug` if both are given. */
+  familySlugs?: string[];
   productType?: "CONTRATIPO" | "IMPORTADO" | "NICHO" | "OUTRO";
+  productTypes?: ("CONTRATIPO" | "IMPORTADO" | "NICHO" | "OUTRO")[];
+  /** Single-concentration filter, kept for callers that only ever need one. */
   concentrationSlug?: string;
+  /** Multi-select concentration facet. Merged with `concentrationSlug` if both are given. */
+  concentrationSlugs?: string[];
+  genders?: ("MASCULINO" | "FEMININO" | "UNISSEX")[];
+  /** Sellable volumes (ml). A product qualifies if any active variant matches. */
+  volumesMl?: number[];
   /** "READY_STOCK" surfaces purchasable-now variants; "MADE_TO_ORDER" surfaces the rest. */
   availability?: "READY_STOCK" | "MADE_TO_ORDER";
   collectionSlug?: string;
@@ -123,16 +136,42 @@ export interface ListProductsResult {
  * which is correct here: a product qualifies if *any* of its volumes match, not
  * only its cheapest one.
  */
+/** Merges a single-value filter with its multi-value sibling into one de-duplicated list. */
+function mergeValues<T>(single: T | undefined, many: T[] | undefined): T[] {
+  const values = new Set<T>(many ?? []);
+  if (single !== undefined) values.add(single);
+  return [...values];
+}
+
 function buildWhere(filters: ListProductsFilters) {
   const AND: Record<string, unknown>[] = [publishedWhere];
 
   if (filters.categorySlug) AND.push({ category: { slug: filters.categorySlug } });
-  if (filters.brandSlug) AND.push({ brand: { slug: filters.brandSlug } });
-  if (filters.productType) AND.push({ productType: filters.productType });
-  if (filters.concentrationSlug) AND.push({ concentration: { slug: filters.concentrationSlug } });
-  if (filters.familySlug) {
-    AND.push({ families: { some: { family: { slug: filters.familySlug } } } });
+
+  const brandSlugs = mergeValues(filters.brandSlug, filters.brandSlugs);
+  if (brandSlugs.length > 0) AND.push({ brand: { slug: { in: brandSlugs } } });
+
+  const productTypes = mergeValues(filters.productType, filters.productTypes);
+  if (productTypes.length > 0) AND.push({ productType: { in: productTypes } });
+
+  const concentrationSlugs = mergeValues(filters.concentrationSlug, filters.concentrationSlugs);
+  if (concentrationSlugs.length > 0) {
+    AND.push({ concentration: { slug: { in: concentrationSlugs } } });
   }
+
+  const familySlugs = mergeValues(filters.familySlug, filters.familySlugs);
+  if (familySlugs.length > 0) {
+    AND.push({ families: { some: { family: { slug: { in: familySlugs } } } } });
+  }
+
+  if (filters.genders && filters.genders.length > 0) {
+    AND.push({ gender: { in: filters.genders } });
+  }
+
+  if (filters.volumesMl && filters.volumesMl.length > 0) {
+    AND.push({ variants: { some: { isActive: true, volumeMl: { in: filters.volumesMl } } } });
+  }
+
   if (filters.collectionSlug) {
     AND.push({ collections: { some: { collection: { slug: filters.collectionSlug } } } });
   }
@@ -339,4 +378,14 @@ export async function listAvailableVolumes(): Promise<number[]> {
     orderBy: { volumeMl: "asc" },
   });
   return rows.map((r) => r.volumeMl);
+}
+
+/** Cheapest and priciest active variant across the published catalogue, for the price slider's bounds. */
+export async function getPriceBounds(): Promise<{ min: number; max: number }> {
+  const result = await prisma.productVariant.aggregate({
+    where: { isActive: true, product: publishedWhere },
+    _min: { priceCents: true },
+    _max: { priceCents: true },
+  });
+  return { min: result._min.priceCents ?? 0, max: result._max.priceCents ?? 0 };
 }

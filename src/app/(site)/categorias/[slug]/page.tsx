@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ShopView } from "@/components/shop/shop-view";
 import { ProductGridSkeleton } from "@/components/common/skeletons";
 import { getCategoryBySlug, listProducts, type ListProductsSort } from "@/server/services/catalog/queries";
+import { getFilterPanelOptions, parseShopSearchParams, type ShopSearchParams } from "@/server/services/catalog/filter-options";
 
 export async function generateMetadata({
   params,
@@ -21,10 +22,10 @@ export default async function CategoryPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ sort?: string; page?: string }>;
+  searchParams: Promise<ShopSearchParams>;
 }) {
   const { slug } = await params;
-  const { sort, page } = await searchParams;
+  const shopParams = await searchParams;
 
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
@@ -32,12 +33,10 @@ export default async function CategoryPage({
   return (
     <Suspense fallback={<div className="container-page py-10"><ProductGridSkeleton count={12} /></div>}>
       <CategoryContent
-        categoryId={category.id}
         categorySlug={category.slug}
         title={category.name}
         description={category.description}
-        sort={sort as ListProductsSort | undefined}
-        page={page}
+        params={shopParams}
       />
     </Suspense>
   );
@@ -47,21 +46,22 @@ async function CategoryContent({
   categorySlug,
   title,
   description,
-  sort,
-  page,
+  params,
 }: {
-  categoryId: string;
   categorySlug: string;
   title: string;
   description: string | null;
-  sort?: ListProductsSort;
-  page?: string;
+  params: ShopSearchParams;
 }) {
-  const result = await listProducts({
-    filters: { categorySlug },
-    sort: sort ?? "featured",
-    page: page ? Number(page) : 1,
-  });
+  const filters = parseShopSearchParams(params, { categorySlug });
+  const [result, filterOptions] = await Promise.all([
+    listProducts({
+      filters,
+      sort: (params.sort as ListProductsSort) ?? "featured",
+      page: params.page ? Number(params.page) : 1,
+    }),
+    getFilterPanelOptions(),
+  ]);
 
   return (
     <ShopView
@@ -70,6 +70,7 @@ async function CategoryContent({
       products={result.items}
       page={result.page}
       totalPages={result.totalPages}
+      filterOptions={filterOptions}
     />
   );
 }
