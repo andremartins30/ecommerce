@@ -6,16 +6,18 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { QuickViewDialog } from "@/components/product/quick-view-dialog";
 import { FloatingCompareBar } from "@/components/compare/floating-compare-bar";
 import { listCategories } from "@/server/services/catalog/queries";
+import { getStoreSettings } from "@/server/services/settings/store-settings";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const categories = await listCategories();
+  const [categories, settings] = await Promise.all([listCategories(), getStoreSettings()]);
+  const shippingPolicy = { handlingDays: settings.handlingDays, shipmentPolicy: settings.shipmentPolicy };
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F8F9FA]">
       <SiteHeaderController />
       <main className="flex-1">{children}</main>
       <SiteFooter />
-      <CartDrawer />
+      <CartDrawer shippingPolicy={shippingPolicy} />
       <SearchOverlay />
       <MobileNav categories={categories} />
       <QuickViewDialog />

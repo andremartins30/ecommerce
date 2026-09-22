@@ -1,7 +1,6 @@
 "use server";
 
-import { listProducts } from "@/server/services/catalog/queries";
-import { listCategories } from "@/server/services/catalog/queries";
+import { listProducts, listCategories, getVariantsByIds } from "@/server/services/catalog/queries";
 import type { Category, ProductSummary } from "@/lib/types";
 
 export interface QuickSearchResult {
@@ -41,4 +40,16 @@ export async function quickSearch(query: string): Promise<QuickSearchResult> {
     categories: matchedCategories,
     total: productResult.total,
   };
+}
+
+/**
+ * Resolves current availability for the cart's variant ids.
+ *
+ * Server Action wrapper around `getVariantsByIds`, called from the client-side
+ * cart (CartView/CartDrawer) so a "mixed cart" delivery notice always reflects
+ * live stock and lead times rather than whatever was true when a line was
+ * added to localStorage.
+ */
+export async function getCartAvailability(variantIds: string[]) {
+  return getVariantsByIds(variantIds);
 }

@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
 import { CartView } from "@/components/cart/cart-view";
+import { getStoreSettings } from "@/server/services/settings/store-settings";
 
 export const metadata: Metadata = {
-  title: "Your Bag",
+  title: "Sua sacola",
 };
 
-export default function CartPage() {
-  return <CartView />;
+export default async function CartPage() {
+  const settings = await getStoreSettings();
+  return (
+    <CartView
+      shippingPolicy={{ handlingDays: settings.handlingDays, shipmentPolicy: settings.shipmentPolicy }}
+    />
+  );
 }

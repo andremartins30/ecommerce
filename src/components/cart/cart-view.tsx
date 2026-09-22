@@ -8,12 +8,19 @@ import { CartItem } from "@/components/cart/cart-item";
 import { CouponInput } from "@/components/cart/coupon-input";
 import { FreeShippingProgress } from "@/components/cart/free-shipping-progress";
 import { OrderSummary } from "@/components/cart/order-summary";
+import { MixedCartNotice } from "@/components/cart/mixed-cart-notice";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { computeOrderTotals } from "@/lib/pricing";
+import { useCartDeliveryPromise } from "@/hooks/use-cart-delivery-promise";
+import type { ShipmentPolicy } from "@/server/domain/delivery/delivery-promise";
 
-export function CartView() {
+export function CartView({
+  shippingPolicy,
+}: {
+  shippingPolicy: { handlingDays: number; shipmentPolicy: ShipmentPolicy };
+}) {
   const hydrated = useHydrated();
   const lines = useCartStore((s) => s.lines);
   const appliedDiscount = useCartStore((s) => s.appliedDiscount);
@@ -24,6 +31,10 @@ export function CartView() {
   const savedLines = lines.filter((l) => l.savedForLater);
   const subtotal = activeLines.reduce((sum, l) => sum + l.price * l.quantity, 0);
   const { discountAmount, shipping, total } = computeOrderTotals(subtotal, appliedDiscount);
+  const { disclosure } = useCartDeliveryPromise(
+    activeLines.map((l) => l.variantId),
+    shippingPolicy
+  );
 
   if (!hydrated) return <div className="container-page py-14" />;
 
@@ -82,6 +93,7 @@ export function CartView() {
         {activeLines.length > 0 && (
           <div className="h-fit space-y-6 rounded-2xl border border-border bg-card p-6">
             <FreeShippingProgress subtotal={subtotal} />
+            {disclosure && <MixedCartNotice disclosure={disclosure} />}
             <Separator />
             <CouponInput
               appliedCode={appliedDiscount?.code ?? null}

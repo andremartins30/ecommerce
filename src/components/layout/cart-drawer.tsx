@@ -12,10 +12,17 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/common/empty-state";
 import { CartItem } from "@/components/cart/cart-item";
 import { FreeShippingProgress } from "@/components/cart/free-shipping-progress";
+import { MixedCartNotice } from "@/components/cart/mixed-cart-notice";
 import { useCartStore } from "@/store/cart-store";
+import { useCartDeliveryPromise } from "@/hooks/use-cart-delivery-promise";
 import { formatPrice } from "@/lib/format";
+import type { ShipmentPolicy } from "@/server/domain/delivery/delivery-promise";
 
-export function CartDrawer() {
+export function CartDrawer({
+  shippingPolicy,
+}: {
+  shippingPolicy: { handlingDays: number; shipmentPolicy: ShipmentPolicy };
+}) {
   const isOpen = useCartStore((s) => s.isOpen);
   const close = useCartStore((s) => s.close);
   const lines = useCartStore((s) => s.lines);
@@ -23,6 +30,10 @@ export function CartDrawer() {
   const activeLines = lines.filter((l) => !l.savedForLater);
   const subtotal = activeLines.reduce((sum, l) => sum + l.price * l.quantity, 0);
   const count = activeLines.reduce((sum, l) => sum + l.quantity, 0);
+  const { disclosure } = useCartDeliveryPromise(
+    activeLines.map((l) => l.variantId),
+    shippingPolicy
+  );
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => (open ? undefined : close())}>
@@ -56,6 +67,7 @@ export function CartDrawer() {
 
             <div className="space-y-4 border-t border-border bg-muted/40 px-5 py-4">
               <FreeShippingProgress subtotal={subtotal} />
+              {disclosure && <MixedCartNotice disclosure={disclosure} />}
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-heading text-base font-semibold text-foreground">

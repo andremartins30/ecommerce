@@ -19,7 +19,7 @@ export function CartItem({ line, compact = false }: { line: CartLine; compact?: 
   return (
     <div className={cn("flex gap-3", compact ? "py-3" : "py-5")}>
       <Link
-        href={`/product/${line.slug}`}
+        href={`/produto/${line.slug}`}
         className={cn(
           "relative shrink-0 overflow-hidden rounded-lg bg-muted",
           compact ? "size-18" : "size-24 sm:size-28"
@@ -37,7 +37,7 @@ export function CartItem({ line, compact = false }: { line: CartLine; compact?: 
               {line.brand}
             </p>
             <Link
-              href={`/product/${line.slug}`}
+              href={`/produto/${line.slug}`}
               className="line-clamp-1 font-heading text-sm font-medium text-foreground hover:underline"
             >
               {line.name}

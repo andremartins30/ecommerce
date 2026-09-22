@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { getStoreSettings } from "@/server/services/settings/store-settings";
-import { mapProductDetail, mapProductSummary, type ProductRow } from "./mappers";
-import type { Category, ProductDetail, ProductSummary } from "@/lib/types";
+import { mapProductDetail, mapProductSummary, mapVariant, type ProductRow } from "./mappers";
+import type { Category, ProductDetail, ProductSummary, ProductVariant } from "@/lib/types";
 
 /**
  * Read side of the catalogue.
@@ -378,6 +378,45 @@ export async function listAvailableVolumes(): Promise<number[]> {
     orderBy: { volumeMl: "asc" },
   });
   return rows.map((r) => r.volumeMl);
+}
+
+export interface VariantWithProductRef {
+  variant: ProductVariant;
+  productId: string;
+  productSlug: string;
+  productName: string;
+}
+
+/**
+ * Resolves current, authoritative availability for a client-held list of
+ * variant ids.
+ *
+ * Mirrors the /api/products/by-ids pattern: the cart is client-side
+ * (localStorage) and only ever holds ids, never trusts a snapshotted
+ * availability or lead time. This is the one place those ids are turned back
+ * into a live `AvailabilityDisplay`, so a "mixed cart" notice always reflects
+ * what is true right now, not what was true when the line was added.
+ */
+export async function getVariantsByIds(variantIds: string[]): Promise<VariantWithProductRef[]> {
+  if (variantIds.length === 0) return [];
+
+  const [rows, settings] = await Promise.all([
+    prisma.productVariant.findMany({
+      where: { id: { in: variantIds }, isActive: true, product: publishedWhere },
+      include: {
+        inventory: { select: { onHand: true, reserved: true, lowStockThreshold: true } },
+        product: { select: { id: true, slug: true, name: true, productionLeadTimeDays: true } },
+      },
+    }),
+    getStoreSettings(),
+  ]);
+
+  return rows.map((row) => ({
+    variant: mapVariant(row, { productionLeadTimeDays: row.product.productionLeadTimeDays }, settings),
+    productId: row.product.id,
+    productSlug: row.product.slug,
+    productName: row.product.name,
+  }));
 }
 
 /** Cheapest and priciest active variant across the published catalogue, for the price slider's bounds. */
