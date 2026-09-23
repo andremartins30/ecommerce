@@ -91,12 +91,18 @@ function storeSettings(): SettingSeed[] {
     // --- Identity: no commercial name is ever hardcoded in the codebase ------
     {
       key: "store.name",
-      value: env.STORE_NAME ?? "Perfumaria Demo",
+      value: env.STORE_NAME ?? "Alquimia Perfumes Artesanais",
       type: "STRING",
       group: "identity",
       label: "Nome da loja",
     },
-    { key: "store.logoUrl", value: env.STORE_LOGO ?? "", type: "STRING", group: "identity", label: "Logotipo" },
+    {
+      key: "store.logoUrl",
+      value: env.STORE_LOGO ?? "/logo-alquimia.png",
+      type: "STRING",
+      group: "identity",
+      label: "Logotipo",
+    },
     { key: "store.faviconUrl", value: env.STORE_FAVICON ?? "", type: "STRING", group: "identity", label: "Favicon" },
     {
       key: "store.primaryColor",
@@ -107,7 +113,7 @@ function storeSettings(): SettingSeed[] {
     },
     {
       key: "store.email",
-      value: env.STORE_EMAIL ?? "contato@example.com",
+      value: env.STORE_EMAIL ?? "contato@alquimia.com.br",
       type: "STRING",
       group: "identity",
       label: "E-mail de contato",

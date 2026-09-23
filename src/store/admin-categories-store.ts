@@ -23,6 +23,6 @@ export const useAdminCategoriesStore = create<AdminCategoriesState>()(
         }),
       deleteCategory: (id) => set({ categories: get().categories.filter((c) => c.id !== id) }),
     }),
-    { name: "arkive-admin-categories" }
+    { name: "perfumaria-admin-categories" }
   )
 );

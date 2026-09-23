@@ -113,7 +113,7 @@ export const useCartStore = create<CartState>()(
       removeDiscount: () => set({ appliedDiscount: null }),
       clear: () => set({ lines: [], appliedDiscount: null }),
     }),
-    { name: "arkive-cart" }
+    { name: "perfumaria-cart" }
   )
 );
 

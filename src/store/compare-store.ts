@@ -55,7 +55,7 @@ export const useCompareStore = create<CompareState>()(
         toast.info("Comparison list cleared");
       },
     }),
-    { name: "nebula-compare" }
+    { name: "perfumaria-compare" }
   )
 );
 

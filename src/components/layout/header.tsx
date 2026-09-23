@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -9,7 +10,7 @@ import {
   Search,
   ShoppingBag,
   ArrowLeftRight,
-  Headphones,
+  Phone,
   ChevronDown,
   LayoutGrid,
   Sparkles,
@@ -26,10 +27,17 @@ import { cn } from "@/lib/utils";
 export function SiteHeader({
   transparent = false,
   userDisplayName,
+  storeName,
+  logoUrl,
+  phone,
 }: {
   transparent?: boolean;
   /** First name of the signed-in customer, resolved server-side from the real session. Null when signed out. */
   userDisplayName: string | null;
+  /** From SystemSetting via getStoreSettings() — never hardcoded (see Task 19). */
+  storeName: string;
+  logoUrl: string;
+  phone?: string;
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
@@ -67,32 +75,23 @@ export function SiteHeader({
             </button>
           </div>
 
-          {/* Logo & Slogan */}
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-[#0B1A30] text-white shadow-xs">
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-                <path d="M3 6h18" />
-                <path d="M16 10a4 4 0 0 1-8 0" />
-              </svg>
-            </div>
-            <div className="flex flex-col">
+          {/* Logo */}
+          <Link href="/" className="flex shrink-0 items-center">
+            {logoUrl ? (
+              <Image
+                src={logoUrl}
+                alt={storeName}
+                width={160}
+                height={44}
+                priority
+                className="h-9 w-auto object-contain sm:h-10"
+                unoptimized
+              />
+            ) : (
               <span className="font-heading text-xl font-extrabold tracking-[0.08em] text-[#0B1A30] uppercase">
-                Nebula
+                {storeName}
               </span>
-              <span className="text-[10px] font-medium tracking-tight text-slate-500">
-                Live Better. Every Day.
-              </span>
-            </div>
+            )}
           </Link>
 
           {/* Center: Search Bar */}
@@ -104,7 +103,7 @@ export function SiteHeader({
               <input
                 type="text"
                 readOnly
-                placeholder="Search for products, brands and more..."
+                placeholder="Buscar por perfumes, marcas e mais..."
                 className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-hidden"
               />
               <button
@@ -157,7 +156,7 @@ export function SiteHeader({
                   </span>
                 )}
               </div>
-              <span className="hidden text-[11px] font-medium sm:block">Wishlist</span>
+              <span className="hidden text-[11px] font-medium sm:block">Favoritos</span>
             </Link>
 
             {/* Compare */}
@@ -173,7 +172,7 @@ export function SiteHeader({
                   </span>
                 )}
               </div>
-              <span className="text-[11px] font-medium">Compare</span>
+              <span className="text-[11px] font-medium">Comparar</span>
             </Link>
 
             {/* Cart */}
@@ -190,7 +189,7 @@ export function SiteHeader({
                   </span>
                 )}
               </div>
-              <span className="hidden text-[11px] font-medium sm:block">Cart</span>
+              <span className="hidden text-[11px] font-medium sm:block">Carrinho</span>
             </button>
           </div>
         </div>
@@ -208,7 +207,7 @@ export function SiteHeader({
                 className="flex h-12 items-center gap-2.5 bg-[#0F2444] px-5 text-sm font-semibold tracking-wide text-white transition-colors hover:bg-[#132d54]"
               >
                 <LayoutGrid className="size-4" />
-                <span>Shop by Categories</span>
+                <span>Comprar por categoria</span>
                 <ChevronDown className={cn("size-3.5 transition-transform duration-200", categoryMenuOpen && "rotate-180")} />
               </button>
 
@@ -260,10 +259,12 @@ export function SiteHeader({
           </div>
 
           {/* Right: Support hotline */}
-          <div className="flex items-center gap-2 text-xs text-slate-300">
-            <Headphones className="size-4 text-slate-400" />
-            <span>Support: <strong className="font-semibold text-white">(123) 456-7890</strong></span>
-          </div>
+          {phone && (
+            <div className="flex items-center gap-2 text-xs text-slate-300">
+              <Phone className="size-4 text-slate-400" />
+              <span>Atendimento: <strong className="font-semibold text-white">{phone}</strong></span>
+            </div>
+          )}
         </div>
       </div>
     </header>

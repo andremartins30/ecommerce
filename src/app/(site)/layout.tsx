@@ -20,9 +20,19 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F8F9FA]">
-      <SiteHeaderController userDisplayName={userDisplayName} />
+      <SiteHeaderController
+        userDisplayName={userDisplayName}
+        storeName={settings.name}
+        logoUrl={settings.logoUrl}
+        phone={settings.phone || undefined}
+      />
       <main className="flex-1">{children}</main>
-      <SiteFooter />
+      <SiteFooter
+        storeName={settings.name}
+        logoUrl={settings.logoUrl}
+        email={settings.email || undefined}
+        phone={settings.phone || undefined}
+      />
       <CartDrawer shippingPolicy={shippingPolicy} />
       <SearchOverlay />
       <MobileNav categories={categories} />

@@ -27,6 +27,6 @@ export const useSearchStore = create<SearchState>()(
         set({ recentSearches: get().recentSearches.filter((t) => t !== term) }),
       clearRecent: () => set({ recentSearches: [] }),
     }),
-    { name: "arkive-search" }
+    { name: "perfumaria-search" }
   )
 );

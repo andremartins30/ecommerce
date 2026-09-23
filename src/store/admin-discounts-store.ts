@@ -23,6 +23,6 @@ export const useAdminDiscountsStore = create<AdminDiscountsState>()(
         }),
       deleteDiscount: (id) => set({ discounts: get().discounts.filter((d) => d.id !== id) }),
     }),
-    { name: "arkive-admin-discounts" }
+    { name: "perfumaria-admin-discounts" }
   )
 );

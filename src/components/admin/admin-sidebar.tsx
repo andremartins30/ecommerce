@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ADMIN_NAV } from "@/lib/nav";
@@ -15,9 +16,13 @@ import { cn } from "@/lib/utils";
 export function AdminSidebar({
   onNavigate,
   permissionKeys = [],
+  storeName,
+  logoUrl,
 }: {
   onNavigate?: () => void;
   permissionKeys?: string[];
+  storeName?: string;
+  logoUrl?: string;
 }) {
   const pathname = usePathname();
   const visibleNav = ADMIN_NAV.filter(
@@ -27,7 +32,13 @@ export function AdminSidebar({
   return (
     <div className="flex h-full flex-col">
       <Link href="/admin" className="flex items-center gap-2 px-5 py-5">
-        <span className="font-heading text-lg font-extrabold tracking-[0.1em] text-[#0B1A30] uppercase">NEBULA</span>
+        {logoUrl ? (
+          <Image src={logoUrl} alt={storeName ?? "Loja"} width={120} height={32} className="h-7 w-auto object-contain" unoptimized />
+        ) : (
+          <span className="font-heading text-lg font-extrabold tracking-[0.1em] text-[#0B1A30] uppercase">
+            {storeName ?? "Admin"}
+          </span>
+        )}
         <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
           Admin
         </span>
@@ -59,7 +70,7 @@ export function AdminSidebar({
           href="/"
           className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
         >
-          ← Back to Store
+          ← Voltar para a loja
         </Link>
       </div>
     </div>

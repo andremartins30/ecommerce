@@ -5,7 +5,12 @@ import { ArrowRight, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-export function NewsletterForm({ className }: { className?: string }) {
+/**
+ * Newsletter signup — still a client-side mock (setTimeout, no real
+ * subscription backend). That's out of scope for Task 19 (store branding);
+ * this only fixes the hardcoded "NEBULA" in the success toast.
+ */
+export function NewsletterForm({ className, storeName }: { className?: string; storeName?: string }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
   const [error, setError] = useState("");
@@ -13,14 +18,14 @@ export function NewsletterForm({ className }: { className?: string }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Enter a valid email address");
+      setError("Informe um e-mail válido");
       return;
     }
     setError("");
     setStatus("loading");
     setTimeout(() => {
       setStatus("success");
-      toast.success("You're on the list", { description: "Welcome to NEBULA." });
+      toast.success("Inscrição confirmada", { description: `Bem-vindo(a) à ${storeName ?? "nossa loja"}.` });
     }, 900);
   }
 
@@ -28,7 +33,7 @@ export function NewsletterForm({ className }: { className?: string }) {
     return (
       <div className={cn("flex items-center gap-2 text-sm font-medium text-emerald-600", className)}>
         <Check className="size-4" />
-        Thanks — check your inbox to confirm.
+        Obrigado — confira seu e-mail para confirmar.
       </div>
     );
   }
@@ -43,8 +48,8 @@ export function NewsletterForm({ className }: { className?: string }) {
             setEmail(e.target.value);
             if (error) setError("");
           }}
-          placeholder="Your email address"
-          aria-label="Email address"
+          placeholder="Seu e-mail"
+          aria-label="E-mail"
           aria-invalid={!!error}
           className={cn(
             "h-10 sm:h-11 flex-1 rounded-lg border border-slate-200 bg-slate-50/70 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#0B1A30] focus:bg-white focus:outline-hidden",
@@ -60,7 +65,7 @@ export function NewsletterForm({ className }: { className?: string }) {
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <>
-              Subscribe <ArrowRight className="size-4" />
+              Inscrever-se <ArrowRight className="size-4" />
             </>
           )}
         </button>

@@ -42,6 +42,6 @@ export const useAuthStore = create<AuthState>()(
     () => ({
       user: DEMO_USER,
     }),
-    { name: "arkive-auth" }
+    { name: "perfumaria-auth" }
   )
 );

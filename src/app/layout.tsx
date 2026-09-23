@@ -3,6 +3,7 @@ import { Manrope, Inter, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
+import { getStoreSettings } from "@/server/services/settings/store-settings";
 import "./globals.css";
 
 const heading = Manrope({
@@ -22,22 +23,35 @@ const mono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "NEBULA — Live Better. Every Day.",
-    template: "%s — NEBULA",
-  },
-  description:
-    "NEBULA is a modern curated destination for lifestyle, fashion, electronics, and home essentials. Live better, every day.",
-  metadataBase: new URL("https://nebula.example.com"),
-  openGraph: {
-    title: "NEBULA — Live Better. Every Day.",
-    description:
-      "Upgrade your lifestyle today. Find the latest trends, top brands, and exclusive deals all in one place.",
-    siteName: "NEBULA",
-    type: "website",
-  },
-};
+/**
+ * Metadata is generated from SystemSetting (see store-settings.ts) rather
+ * than hardcoded — the store name, description and favicon come from the
+ * admin panel (Task 19), not from a code deploy. APP_URL is validated env
+ * config (src/server/env.ts), not a placeholder domain.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getStoreSettings();
+  const appUrl = process.env.APP_URL || "http://localhost:3000";
+  const title = `${settings.name} — Perfumes artesanais e contratipos`;
+  const description = `${settings.name}: perfumaria artesanal brasileira com contratipos e fragrâncias importadas, disponibilidade real de estoque e prazos de produção claros.`;
+
+  return {
+    title: {
+      default: title,
+      template: `%s — ${settings.name}`,
+    },
+    description,
+    metadataBase: new URL(appUrl),
+    icons: settings.faviconUrl ? { icon: settings.faviconUrl } : undefined,
+    openGraph: {
+      title,
+      description,
+      siteName: settings.name,
+      type: "website",
+      images: settings.logoUrl ? [{ url: settings.logoUrl }] : undefined,
+    },
+  };
+}
 
 export default function RootLayout({
   children,
@@ -46,7 +60,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="pt-BR"
       className={`${heading.variable} ${body.variable} ${mono.variable} h-full antialiased`}
       suppressHydrationWarning
     >

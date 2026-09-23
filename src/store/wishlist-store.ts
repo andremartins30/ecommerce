@@ -35,7 +35,7 @@ export const useWishlistStore = create<WishlistState>()(
       has: (productId) => get().productIds.includes(productId),
       clear: () => set({ productIds: [] }),
     }),
-    { name: "arkive-wishlist" }
+    { name: "perfumaria-wishlist" }
   )
 );
 

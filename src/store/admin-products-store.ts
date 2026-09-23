@@ -42,6 +42,6 @@ export const useAdminProductsStore = create<AdminProductsState>()(
       },
       getById: (id) => get().products.find((p) => p.id === id),
     }),
-    { name: "arkive-admin-products" }
+    { name: "perfumaria-admin-products" }
   )
 );

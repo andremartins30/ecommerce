@@ -76,14 +76,14 @@ const envSchema = z.object({
   // --- Store identity -------------------------------------------------------
   // These seed SystemSetting on first boot. Once the store exists, the admin
   // panel is the source of truth and these are only bootstrap defaults.
-  STORE_NAME: z.string().min(1).default("Perfumaria"),
-  STORE_LOGO: z.string().default(""),
+  STORE_NAME: z.string().min(1).default("Alquimia Perfumes Artesanais"),
+  STORE_LOGO: z.string().default("/logo-alquimia.png"),
   STORE_FAVICON: z.string().default(""),
   STORE_PRIMARY_COLOR: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "must be a hex colour such as #1B1B1F")
     .default("#1B1B1F"),
-  STORE_EMAIL: z.string().email("must be a valid e-mail address").default("contato@example.com"),
+  STORE_EMAIL: z.string().email("must be a valid e-mail address").default("contato@alquimia.com.br"),
   STORE_PHONE: z.string().default(""),
   STORE_WHATSAPP: z.string().default(""),
   STORE_CNPJ: z.string().default(""),

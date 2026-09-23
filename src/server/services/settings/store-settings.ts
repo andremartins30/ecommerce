@@ -15,8 +15,8 @@ import type { ShipmentPolicy, StoreSettings } from "@/lib/types";
  */
 
 const DEFAULTS: StoreSettings = {
-  name: "Perfumaria",
-  logoUrl: "",
+  name: "Alquimia Perfumes Artesanais",
+  logoUrl: "/logo-alquimia.png",
   faviconUrl: "",
   primaryColor: "#1B1B1F",
   email: "",
@@ -92,7 +92,11 @@ export function buildStoreSettings(raw: Map<string, string>): StoreSettings {
     name: readString(raw.get(KEYS.name), DEFAULTS.name) || DEFAULTS.name,
     logoUrl: readString(raw.get(KEYS.logoUrl), DEFAULTS.logoUrl),
     faviconUrl: readString(raw.get(KEYS.faviconUrl), DEFAULTS.faviconUrl),
-    primaryColor: readString(raw.get(KEYS.primaryColor), DEFAULTS.primaryColor),
+    // Unlike logo/favicon/contact fields, an empty string is not a valid
+    // colour — a blank value here (e.g. a stale row from before this field
+    // existed) must fall back, the same way `name` already does above.
+    primaryColor:
+      readString(raw.get(KEYS.primaryColor), DEFAULTS.primaryColor) || DEFAULTS.primaryColor,
     email: readString(raw.get(KEYS.email), DEFAULTS.email),
     phone: readString(raw.get(KEYS.phone), DEFAULTS.phone),
     whatsapp: readString(raw.get(KEYS.whatsapp), DEFAULTS.whatsapp),
@@ -125,6 +129,37 @@ export function buildStoreSettings(raw: Map<string, string>): StoreSettings {
 export async function getStoreSettings(): Promise<StoreSettings> {
   const rows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
   return buildStoreSettings(new Map(rows.map((row) => [row.key, row.value])));
+}
+
+/**
+ * Upserts a set of SystemSetting rows by their `StoreSettings` field name.
+ *
+ * Values are always written as strings (see the `SystemSetting.value` column
+ * comment) — arrays/booleans are the caller's responsibility to serialise
+ * before calling this, same convention `buildStoreSettings` reads back.
+ * `updatedById` is stamped from the caller so an admin's identity survives on
+ * the row even after the admin account itself is later removed (schema keeps
+ * this column as a plain string, not a FK, for exactly that reason).
+ *
+ * This is a low-level primitive with no permission check — callers (Server
+ * Actions) are responsible for calling `requirePermission()` first and for
+ * writing their own AuditLog entry, same layering as product-actions.ts.
+ */
+export async function setStoreSettings(
+  values: Partial<Record<keyof StoreSettings, string>>,
+  updatedById: string
+): Promise<void> {
+  const entries = Object.entries(values) as [keyof StoreSettings, string][];
+  if (entries.length === 0) return;
+
+  await prisma.$transaction(
+    entries.map(([field, value]) =>
+      prisma.systemSetting.update({
+        where: { key: KEYS[field] },
+        data: { value, updatedById },
+      })
+    )
+  );
 }
 
 export const STORE_SETTING_KEYS = KEYS;

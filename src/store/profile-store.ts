@@ -62,6 +62,6 @@ export const useProfileStore = create<ProfileState>()(
           paymentMethods: get().paymentMethods.map((p) => ({ ...p, isDefault: p.id === id })),
         }),
     }),
-    { name: "arkive-profile" }
+    { name: "perfumaria-profile" }
   )
 );

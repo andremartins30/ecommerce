@@ -51,7 +51,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Organic Cotton Oxford Shirt",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-apparel",
     price: 98,
     shortDescription: "A breathable, garment-dyed oxford with a soft, worn-in hand-feel.",
@@ -92,7 +92,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Merino Crewneck Sweater",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-apparel",
     price: 128,
     shortDescription: "17.5-micron merino, fully fashioned for a clean, seamless fit.",
@@ -129,7 +129,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Heavyweight Pocket Tee",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-apparel",
     price: 48,
     shortDescription: "8oz combed cotton, cut with a boxier fit and a reinforced pocket.",
@@ -152,7 +152,7 @@ const seeds: ProductSeed[] = [
   // ---- Footwear ----
   {
     name: "Leather Court Sneaker",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-footwear",
     price: 178,
     shortDescription: "Full-grain leather on a cupsole, built to be resoled.",
@@ -279,7 +279,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Minimal Cardholder",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-bags",
     price: 58,
     shortDescription: "A slim, four-pocket cardholder in vegetable-tanned leather.",
@@ -336,7 +336,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Minimalist Quartz",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-watches",
     price: 168,
     shortDescription: "A slim 36mm quartz watch with a domed sapphire crystal.",
@@ -404,7 +404,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Polarized Aviator",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-eyewear",
     price: 128,
     shortDescription: "A classic aviator silhouette in brushed metal.",
@@ -474,7 +474,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Fast-Charge Power Bank",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-tech",
     price: 68,
     shortDescription: "A 10,000mAh power bank with 65W pass-through charging.",
@@ -492,7 +492,7 @@ const seeds: ProductSeed[] = [
   // ---- Fragrance ----
   {
     name: "Eau de Parfum — Santal 26",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-fragrance",
     price: 128,
     shortDescription: "Sandalwood, cardamom, and cedar in a long-wear formulation.",
@@ -509,7 +509,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Eau de Parfum — Amber Noir",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-fragrance",
     price: 128,
     shortDescription: "Dark amber, black pepper, and leaccord for evening wear.",
@@ -525,7 +525,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Candle — Cedar & Fig",
-    brand: "ARKIVE Studio",
+    brand: "Alquimia Studio",
     categoryId: "cat-fragrance",
     price: 48,
     shortDescription: "A coconut-wax candle with a 60-hour burn time.",
@@ -544,7 +544,7 @@ const seeds: ProductSeed[] = [
   // ---- Home & Living ----
   {
     name: "Ceramic Pour-Over Set",
-    brand: "NEBULA Living",
+    brand: "Alquimia Living",
     categoryId: "cat-home",
     price: 78,
     shortDescription: "A hand-glazed ceramic dripper with a matching carafe.",
@@ -562,7 +562,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Linen Throw Blanket",
-    brand: "NEBULA Living",
+    brand: "Alquimia Living",
     categoryId: "cat-home",
     price: 118,
     shortDescription: "A stonewashed linen throw, woven in a heavier weight.",
@@ -579,7 +579,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Hand-Thrown Stoneware Mug Set",
-    brand: "NEBULA Living",
+    brand: "Alquimia Living",
     categoryId: "cat-home",
     price: 68,
     shortDescription: "A set of four hand-thrown mugs, no two exactly alike.",
@@ -597,7 +597,7 @@ const seeds: ProductSeed[] = [
   },
   {
     name: "Woven Storage Basket",
-    brand: "NEBULA Living",
+    brand: "Alquimia Living",
     categoryId: "cat-home",
     price: 58,
     shortDescription: "A hand-woven seagrass basket with leather handles.",
@@ -645,10 +645,10 @@ function buildVariants(
  */
 const trendingSeeds: Product[] = [
   {
-    id: "nebula-speaker-01",
+    id: "trend-speaker-01",
     slug: "bluetooth-speaker",
     name: "Bluetooth Speaker",
-    brand: "NEBULA Sound",
+    brand: "Alquimia Sound",
     categoryId: "cat-electronics",
     description: "Deep 360-degree bass and IPX7 water resistance in an ultra-portable cylindrical form factor.",
     shortDescription: "High-fidelity 360-degree wireless acoustic audio.",
@@ -680,10 +680,10 @@ const trendingSeeds: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: "nebula-watch-02",
+    id: "trend-watch-02",
     slug: "smart-watch",
     name: "Smart Watch",
-    brand: "NEBULA Tech",
+    brand: "Alquimia Tech",
     categoryId: "cat-electronics",
     description: "AMOLED edge-to-edge display with comprehensive 24/7 health tracking, sleep analytics, and 14-day battery life.",
     shortDescription: "Precision AMOLED fitness & health companion.",
@@ -715,10 +715,10 @@ const trendingSeeds: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: "nebula-backpack-03",
+    id: "trend-backpack-03",
     slug: "backpack",
     name: "Backpack",
-    brand: "NEBULA Carry",
+    brand: "Alquimia Carry",
     categoryId: "cat-fashion",
     description: "Weatherproof structured commuter backpack with padded 16-inch laptop compartment and magnetic quick-release buckles.",
     shortDescription: "Weatherproof 22L minimalist commuter backpack.",
@@ -749,10 +749,10 @@ const trendingSeeds: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: "nebula-earbuds-04",
+    id: "trend-earbuds-04",
     slug: "wireless-earbuds",
     name: "Wireless Earbuds",
-    brand: "NEBULA Sound",
+    brand: "Alquimia Sound",
     categoryId: "cat-electronics",
     description: "Active Noise Cancelling true wireless earbuds with spatial audio processing and fast Qi wireless charging.",
     shortDescription: "ANC earbuds with 32hr battery life.",
@@ -783,10 +783,10 @@ const trendingSeeds: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: "nebula-bottle-05",
+    id: "trend-bottle-05",
     slug: "stainless-steel-bottle",
     name: "Stainless Steel Bottle",
-    brand: "NEBULA Living",
+    brand: "Alquimia Living",
     categoryId: "cat-sports",
     description: "Double-wall vacuum insulated 24oz water bottle keeping drinks ice cold for 24 hours or piping hot for 12 hours.",
     shortDescription: "Vacuum insulated 24oz stainless hydration bottle.",
@@ -817,10 +817,10 @@ const trendingSeeds: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: "nebula-sunglasses-06",
+    id: "trend-sunglasses-06",
     slug: "sunglasses",
     name: "Sunglasses",
-    brand: "NEBULA Eyewear",
+    brand: "Alquimia Eyewear",
     categoryId: "cat-fashion",
     description: "Polarized UV400 classic black sunglasses with Italian hand-finished cellulose acetate frames.",
     shortDescription: "Polarized UV400 classic handcrafted sunglasses.",

@@ -19,6 +19,6 @@ export const useAdminReviewsStore = create<AdminReviewsState>()(
         set({ reviews: get().reviews.map((r) => (r.id === id ? { ...r, status } : r)) }),
       deleteReview: (id) => set({ reviews: get().reviews.filter((r) => r.id !== id) }),
     }),
-    { name: "arkive-admin-reviews" }
+    { name: "perfumaria-admin-reviews" }
   )
 );

@@ -23,6 +23,6 @@ export const useAdminOrdersStore = create<AdminOrdersState>()(
         }),
       getById: (id) => get().orders.find((o) => o.id === id),
     }),
-    { name: "arkive-admin-orders" }
+    { name: "perfumaria-admin-orders" }
   )
 );

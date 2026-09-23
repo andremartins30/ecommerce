@@ -30,7 +30,7 @@ export const useOrderStore = create<OrderState>()(
       lastOrder: null,
       setLastOrder: (order) => set({ lastOrder: order }),
     }),
-    { name: "arkive-last-order" }
+    { name: "perfumaria-last-order" }
   )
 );
 
