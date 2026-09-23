@@ -22,13 +22,22 @@ export function VerifyEmail() {
 
   useEffect(() => {
     if (!token) return;
+    // Guards against React Strict Mode's double-invoke in development
+    // firing this twice for the same token — the Server Action itself is
+    // also idempotent (see verifyEmailAction), this just avoids a redundant
+    // second round-trip.
+    let cancelled = false;
     verifyEmailAction(token).then((result) => {
+      if (cancelled) return;
       setState(
         result.success
           ? { status: "success", errorMessage: null }
           : { status: "error", errorMessage: result.formError ?? "Não foi possível verificar seu e-mail." }
       );
     });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const { status, errorMessage } = state;

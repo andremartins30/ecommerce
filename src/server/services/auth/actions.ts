@@ -6,6 +6,8 @@ import { prisma } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/server/services/auth/password";
 import { generateOpaqueToken, hashToken } from "@/server/services/auth/tokens";
 import { createSession, destroySession, getSessionUser } from "@/server/services/auth/session";
+import { getMailProvider, emailVerificationTemplate, passwordResetTemplate } from "@/server/providers/mail";
+import { getStoreSettings } from "@/server/services/settings/store-settings";
 import {
   loginSchema,
   registerSchema,
@@ -20,11 +22,13 @@ import {
  * what a session can *do* once it exists is decided by proxy.ts and, later,
  * RBAC (task 18), not by having two parallel auth systems.
  *
- * No MailProvider exists yet (task 17 adds the fake outbox), so
- * verification/reset links are logged to the server console instead of
- * sent. That is a development convenience, not a security shortcut — the
- * token itself still expires, is single-use, and is never echoed back to the
- * browser in the response.
+ * Verification/reset emails go through the MailProvider abstraction
+ * (src/server/providers/mail) — MAIL_PROVIDER=fake writes them to
+ * `.mail-outbox/` in development, a real driver ships later. Sending never
+ * blocks or fails the action it's attached to: if the provider throws, the
+ * account is still created / the reset token still exists, and the error is
+ * only logged — the token itself remains the source of truth, not whether
+ * the email happened to arrive.
  */
 
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -50,13 +54,38 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function logDevLink(label: string, path: string, token: string): void {
-  // Reads APP_URL directly rather than through getEnv(): this is a
-  // dev-only console log, not a security-relevant path, and it must not be
-  // able to fail email verification or password reset just because some
-  // unrelated env var (store branding, a provider key) is misconfigured.
-  const appUrl = process.env.APP_URL || "http://localhost:3000";
-  console.log(`[auth] ${label}: ${appUrl}${path}?token=${encodeURIComponent(token)}`);
+function appUrl(): string {
+  return process.env.APP_URL || "http://localhost:3000";
+}
+
+/** Store branding for the email's sender line/footer, with safe fallbacks — see store-settings.ts's own defensive pattern. */
+async function storeBranding(): Promise<{ name: string; email: string }> {
+  const settings = await getStoreSettings();
+  return {
+    name: settings.name || "Perfumaria",
+    email: settings.email || "contato@example.com",
+  };
+}
+
+/** Sends and never throws: a mail failure must not roll back the account/token it's attached to. */
+async function sendMailSafely(message: { to: string; subject: string; html: string; text: string }): Promise<void> {
+  try {
+    await getMailProvider().send(message);
+  } catch (error) {
+    console.error("[auth] failed to send email:", error);
+  }
+}
+
+async function sendVerificationEmail(email: string, token: string): Promise<void> {
+  const store = await storeBranding();
+  const verificationUrl = `${appUrl()}/verify-email?token=${encodeURIComponent(token)}`;
+  await sendMailSafely(emailVerificationTemplate({ to: email, verificationUrl, store }));
+}
+
+async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
+  const store = await storeBranding();
+  const resetUrl = `${appUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+  await sendMailSafely(passwordResetTemplate({ to: email, resetUrl, store }));
 }
 
 export async function loginAction(input: unknown): Promise<AuthActionResult> {
@@ -157,8 +186,8 @@ export async function requestPasswordResetAction(input: unknown): Promise<AuthAc
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
 
   // Always report success, whether or not the account exists — the same
-  // enumeration concern as login. The email itself (once task 17 sends one)
-  // is the only place that reveals the account's actual existence.
+  // enumeration concern as login. The email itself is the only place that
+  // reveals the account's actual existence; nothing sent to the browser does.
   if (!user) return { success: true };
 
   const token = generateOpaqueToken();
@@ -170,7 +199,7 @@ export async function requestPasswordResetAction(input: unknown): Promise<AuthAc
     },
   });
 
-  logDevLink("Link de redefinição de senha", "/reset-password", token);
+  await sendPasswordResetEmail(email, token);
   return { success: true };
 }
 
@@ -227,16 +256,33 @@ async function issueEmailVerification(userId: string, email: string): Promise<vo
       expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
     },
   });
-  logDevLink("Link de verificação de e-mail", "/verify-email", token);
+  await sendVerificationEmail(email, token);
 }
 
 export async function verifyEmailAction(token: string): Promise<AuthActionResult> {
   if (!token) return { success: false, formError: "Link inválido ou incompleto." };
 
   const tokenHash = hashToken(token);
-  const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } });
+  const record = await prisma.emailVerificationToken.findUnique({
+    where: { tokenHash },
+    include: { user: { select: { emailVerified: true } } },
+  });
 
-  if (!record || record.consumedAt || record.expiresAt < new Date()) {
+  if (!record) {
+    return { success: false, formError: "Este link expirou ou já foi utilizado." };
+  }
+
+  // Idempotent: React's Strict Mode (and a user double-clicking, or opening
+  // the link twice) calls this twice with the same token. If it was already
+  // consumed by *this exact token* and the account ended up verified, that
+  // is the same outcome as a fresh success — not an error to show the user.
+  if (record.consumedAt) {
+    return record.user.emailVerified
+      ? { success: true }
+      : { success: false, formError: "Este link expirou ou já foi utilizado." };
+  }
+
+  if (record.expiresAt < new Date()) {
     return { success: false, formError: "Este link expirou ou já foi utilizado." };
   }
 
