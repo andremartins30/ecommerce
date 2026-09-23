@@ -6,14 +6,15 @@ import {
   inventoryAdjustmentSchema,
   type InventoryAdjustmentValues,
 } from "@/server/services/admin/inventory-schema";
+import { requirePermission } from "@/server/services/auth/rbac";
 
 /**
  * Write side for manual stock adjustments.
  *
- * There is no session yet (auth lands in task 16); every AuditLog entry here
- * carries a placeholder actor, same convention as product-actions.ts.
+ * Requires the `inventory.write` permission (see prisma/seed.ts's role→
+ * permission map) and writes the real signed-in admin as the AuditLog actor —
+ * same convention as product-actions.ts.
  */
-const PLACEHOLDER_ACTOR_LABEL = "Admin (sessão não implementada)";
 
 export interface InventoryActionResult {
   success: boolean;
@@ -22,6 +23,8 @@ export interface InventoryActionResult {
 }
 
 export async function adjustInventory(input: unknown): Promise<InventoryActionResult> {
+  const admin = await requirePermission("inventory.write");
+
   const parsed = inventoryAdjustmentSchema.safeParse(input);
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -78,8 +81,8 @@ export async function adjustInventory(input: unknown): Promise<InventoryActionRe
       prisma.auditLog.create({
         data: {
           actorType: "USER",
-          actorId: null,
-          actorLabel: PLACEHOLDER_ACTOR_LABEL,
+          actorId: admin.id,
+          actorLabel: `${admin.adminUser.name} <${admin.email}>`,
           action: "inventory.adjust",
           entityType: "Inventory",
           entityId: variant.inventory.id,

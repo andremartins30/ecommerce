@@ -5,17 +5,18 @@ import { prisma } from "@/server/db/client";
 import { fromReais } from "@/server/domain/pricing/money";
 import { slugify } from "@/lib/slug";
 import { productSchema, type ProductFormValues } from "@/server/services/admin/product-schema";
+import { requirePermission, type AdminSessionUser } from "@/server/services/auth/rbac";
+import { requireReauth, ReauthRequiredError } from "@/server/services/auth/session";
 
 /**
  * Write side for the admin product screens.
  *
- * There is no session yet (auth lands in task 16), so every AuditLog entry
- * here is written with `actorId: null` and a placeholder `actorLabel` rather
- * than skipping the audit trail — the schema was designed for this
- * (`actorId` is optional, `onDelete: SetNull`). Once real sessions exist,
- * this is the one place that needs to start passing a real actor.
+ * Every action requires the `product.write` permission (see
+ * prisma/seed.ts's role→permission map) and writes the real signed-in admin
+ * as the AuditLog actor — `actorId` stays optional at the schema level
+ * (`onDelete: SetNull`) so a removed admin's history survives, but a live
+ * write should never fall back to the placeholder that existed before task 18.
  */
-const PLACEHOLDER_ACTOR_LABEL = "Admin (sessão não implementada)";
 
 export interface ProductActionResult {
   success: boolean;
@@ -148,12 +149,19 @@ function productScalars(data: ProductFormValues) {
 
 type AuditChanges = Record<string, { before: string | number | boolean | null; after: string | number | boolean | null }>;
 
-async function writeAuditLog(params: { action: string; entityId: string; changes?: AuditChanges }) {
+function actorLabel(admin: AdminSessionUser): string {
+  return `${admin.adminUser.name} <${admin.email}>`;
+}
+
+async function writeAuditLog(
+  admin: AdminSessionUser,
+  params: { action: string; entityId: string; changes?: AuditChanges }
+) {
   await prisma.auditLog.create({
     data: {
       actorType: "USER",
-      actorId: null,
-      actorLabel: PLACEHOLDER_ACTOR_LABEL,
+      actorId: admin.id,
+      actorLabel: actorLabel(admin),
       action: params.action,
       entityType: "Product",
       entityId: params.entityId,
@@ -163,6 +171,8 @@ async function writeAuditLog(params: { action: string; entityId: string; changes
 }
 
 export async function createProduct(input: unknown): Promise<ProductActionResult> {
+  const admin = await requirePermission("product.write");
+
   const result = toActionResult(input);
   if ("fieldErrors" in result) return { success: false, fieldErrors: result.fieldErrors };
 
@@ -206,7 +216,7 @@ export async function createProduct(input: unknown): Promise<ProductActionResult
       await prisma.$transaction(initialMovements);
     }
 
-    await writeAuditLog({
+    await writeAuditLog(admin, {
       action: "product.create",
       entityId: created.id,
       changes: { name: { before: null, after: data.name } },
@@ -221,6 +231,8 @@ export async function createProduct(input: unknown): Promise<ProductActionResult
 }
 
 export async function updateProduct(input: unknown): Promise<ProductActionResult> {
+  const admin = await requirePermission("product.write");
+
   const result = toActionResult(input);
   if ("fieldErrors" in result) return { success: false, fieldErrors: result.fieldErrors };
 
@@ -320,7 +332,7 @@ export async function updateProduct(input: unknown): Promise<ProductActionResult
     if (before.status !== data.status) changes.status = { before: before.status, after: data.status };
     if (before.slug !== data.slug) changes.slug = { before: before.slug, after: data.slug };
 
-    await writeAuditLog({ action: "product.update", entityId: data.id, changes });
+    await writeAuditLog(admin, { action: "product.update", entityId: data.id, changes });
 
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${data.id}/edit`);
@@ -332,6 +344,24 @@ export async function updateProduct(input: unknown): Promise<ProductActionResult
 }
 
 export async function deleteProduct(productId: string): Promise<ProductActionResult> {
+  const admin = await requirePermission("product.write");
+  // Deletion is irreversible (cascades to variants/inventory/history), so it
+  // additionally requires a recently-reauthenticated session — narrower than
+  // the MFA route gate in proxy.ts, checked only for this specific action.
+  // Reported back as a normal formError (not a thrown/uncaught error) so the
+  // existing toast-based UI in products-table.tsx can surface it as-is.
+  try {
+    await requireReauth();
+  } catch (error) {
+    if (error instanceof ReauthRequiredError) {
+      return {
+        success: false,
+        formError: "Por segurança, confirme sua senha novamente antes de excluir um produto.",
+      };
+    }
+    throw error;
+  }
+
   const existing = await prisma.product.findUnique({
     where: { id: productId },
     select: { name: true, slug: true },
@@ -341,7 +371,7 @@ export async function deleteProduct(productId: string): Promise<ProductActionRes
   try {
     await prisma.product.delete({ where: { id: productId } });
 
-    await writeAuditLog({
+    await writeAuditLog(admin, {
       action: "product.delete",
       entityId: productId,
       changes: { name: { before: existing.name, after: null } },
@@ -361,6 +391,8 @@ export async function deleteProduct(productId: string): Promise<ProductActionRes
  * unique.
  */
 export async function duplicateProduct(productId: string): Promise<ProductActionResult> {
+  const admin = await requirePermission("product.write");
+
   const source = await getProductByIdForAdminInternal(productId);
   if (!source) return { success: false, formError: "Produto não encontrado" };
 
@@ -383,7 +415,7 @@ export async function duplicateProduct(productId: string): Promise<ProductAction
       select: { id: true },
     });
 
-    await writeAuditLog({
+    await writeAuditLog(admin, {
       action: "product.duplicate",
       entityId: created.id,
       changes: { name: { before: null, after: `${source.name} (Cópia)` } },

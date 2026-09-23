@@ -28,11 +28,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-screen bg-background">
       <div className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:block">
         <div className="sticky top-0 h-screen">
-          <AdminSidebar />
+          <AdminSidebar permissionKeys={user.adminUser.permissionKeys} />
         </div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <AdminTopbar adminName={user.adminUser.name} adminEmail={user.email} />
+        <AdminTopbar adminName={user.adminUser.name} adminEmail={user.email} permissionKeys={user.adminUser.permissionKeys} />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>

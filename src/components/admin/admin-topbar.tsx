@@ -15,7 +15,15 @@ import {
 import { logoutAction } from "@/server/services/auth/actions";
 import Link from "next/link";
 
-export function AdminTopbar({ adminName, adminEmail }: { adminName: string; adminEmail: string }) {
+export function AdminTopbar({
+  adminName,
+  adminEmail,
+  permissionKeys = [],
+}: {
+  adminName: string;
+  adminEmail: string;
+  permissionKeys?: string[];
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const initials = adminName
     .split(" ")
@@ -74,7 +82,7 @@ export function AdminTopbar({ adminName, adminEmail }: { adminName: string; admi
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-64 bg-sidebar p-0 text-sidebar-foreground">
           <SheetTitle className="sr-only">Admin Menu</SheetTitle>
-          <AdminSidebar onNavigate={() => setMobileOpen(false)} />
+          <AdminSidebar onNavigate={() => setMobileOpen(false)} permissionKeys={permissionKeys} />
         </SheetContent>
       </Sheet>
     </header>

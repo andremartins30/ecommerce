@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/server/services/auth/password";
 import { generateOpaqueToken, hashToken } from "@/server/services/auth/tokens";
-import { createSession, destroySession, getSessionUser } from "@/server/services/auth/session";
+import { createSession, destroySession, getSessionUser, markReauthenticated } from "@/server/services/auth/session";
 import { getMailProvider, emailVerificationTemplate, passwordResetTemplate } from "@/server/providers/mail";
 import { getStoreSettings } from "@/server/services/settings/store-settings";
 import {
@@ -40,6 +40,8 @@ export interface AuthActionResult {
   success: boolean;
   fieldErrors?: Record<string, string>;
   formError?: string;
+  /** True when the session was created but still needs a TOTP/recovery code before proxy.ts will let it through to /admin. */
+  mfaRequired?: boolean;
 }
 
 async function requestMetadata(): Promise<{ ipAddress: string | null; userAgent: string | null }> {
@@ -136,6 +138,17 @@ export async function loginAction(input: unknown): Promise<AuthActionResult> {
 
   const meta = await requestMetadata();
   await createSession(user.id, meta);
+  // A freshly-verified password is itself a reauthentication — this opens the
+  // elevated window immediately rather than making the user re-enter their
+  // password a second time just to do something sensitive right after login.
+  await markReauthenticated();
+
+  // Staff enrolled in MFA must clear a TOTP challenge before proxy.ts admits
+  // them to /admin — the session exists (so /admin/mfa/challenge itself is
+  // reachable) but is not yet trusted for anything beyond that.
+  if (user.mfaEnabledAt) {
+    return { success: true, mfaRequired: true };
+  }
 
   return { success: true };
 }
@@ -291,6 +304,29 @@ export async function verifyEmailAction(token: string): Promise<AuthActionResult
     prisma.emailVerificationToken.update({ where: { id: record.id }, data: { consumedAt: new Date() } }),
   ]);
 
+  return { success: true };
+}
+
+/**
+ * Re-verifies the current user's password to open the "reauthenticated"
+ * elevated window used by requireReauth() (see session.ts) for sensitive
+ * Server Actions. Does not touch mfaSatisfied — an MFA-enrolled admin must
+ * still pass verifyMfaChallenge separately; this only proves "I still have
+ * the password", the same bar a fresh login clears.
+ */
+export async function reauthenticateAction(password: string): Promise<AuthActionResult> {
+  const user = await getSessionUser();
+  if (!user) return { success: false, formError: "Você precisa estar autenticado." };
+
+  const record = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+  if (!record) return { success: false, formError: "Você precisa estar autenticado." };
+
+  const matches = await verifyPassword(record.passwordHash, password);
+  if (!matches) {
+    return { success: false, formError: "Senha incorreta." };
+  }
+
+  await markReauthenticated();
   return { success: true };
 }
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
@@ -15,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInput } from "@/components/auth/password-input";
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -46,8 +45,22 @@ export function LoginForm() {
         setFormError(result.formError ?? "Não foi possível entrar. Tente novamente.");
         return;
       }
-      router.push(searchParams.get("redirect") || "/account");
-      router.refresh();
+      // Hard navigation, not router.push: a session was just created (or an
+      // MFA challenge just opened) server-side, and the client router cache
+      // could otherwise serve a pre-login RSC payload for the target route.
+      if (result.mfaRequired) {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.assign("/admin/mfa/challenge");
+        return;
+      }
+      // Only accept a same-origin relative path — an unvalidated redirect
+      // param would otherwise let a crafted login link send a user to an
+      // external site right after they authenticate (open redirect).
+      const requestedRedirect = searchParams.get("redirect");
+      const redirect = requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")
+        ? requestedRedirect
+        : null;
+      window.location.assign(redirect || "/account");
     } finally {
       setSubmitting(false);
     }

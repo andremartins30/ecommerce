@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { EnvValidationError, parseEnv, usesDevOnlyDrivers } from "./env";
 
 const VALID_SECRET = "a".repeat(32);
+const VALID_MFA_KEY = "b".repeat(32);
 
 function baseEnv(overrides: Record<string, string | undefined> = {}) {
   return {
     DATABASE_URL: "postgresql://user:pass@localhost:5432/perfumaria",
     SESSION_SECRET: VALID_SECRET,
+    MFA_ENCRYPTION_KEY: VALID_MFA_KEY,
     ...overrides,
   };
 }

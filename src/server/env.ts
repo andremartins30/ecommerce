@@ -65,6 +65,14 @@ const envSchema = z.object({
     .string()
     .min(32, "must be at least 32 characters of high-entropy random data"),
 
+  // AES-256-GCM key for encrypting TOTP secrets at rest (they must be
+  // reversible to generate a code, unlike passwords, so Argon2 cannot be
+  // used here). Exactly 32 bytes once decoded from base64url — see
+  // src/server/services/auth/mfa-crypto.ts.
+  MFA_ENCRYPTION_KEY: z
+    .string()
+    .min(32, "must be at least 32 characters of high-entropy random data"),
+
   // --- Store identity -------------------------------------------------------
   // These seed SystemSetting on first boot. Once the store exists, the admin
   // panel is the source of truth and these are only bootstrap defaults.

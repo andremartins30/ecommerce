@@ -6,8 +6,23 @@ import { ADMIN_NAV } from "@/lib/nav";
 import { ADMIN_ICONS } from "@/components/admin/admin-icon";
 import { cn } from "@/lib/utils";
 
-export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
+/**
+ * `permissionKeys` hides items a role couldn't act on anyway — this is
+ * presentation only, never the enforcement boundary (see ARCHITECTURE.md
+ * and rbac.ts's own comment). Every write action re-checks the same
+ * permission on the server regardless of what this menu shows.
+ */
+export function AdminSidebar({
+  onNavigate,
+  permissionKeys = [],
+}: {
+  onNavigate?: () => void;
+  permissionKeys?: string[];
+}) {
   const pathname = usePathname();
+  const visibleNav = ADMIN_NAV.filter(
+    (item) => !("permission" in item) || permissionKeys.includes(item.permission)
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -18,7 +33,7 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
         </span>
       </Link>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
-        {ADMIN_NAV.map((item) => {
+        {visibleNav.map((item) => {
           const Icon = ADMIN_ICONS[item.icon];
           const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
           return (

@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Boxes,
+  ClipboardList,
   LayoutDashboard,
   LayoutGrid,
   PackageCheck,
@@ -22,5 +23,6 @@ export const ADMIN_ICONS: Record<string, LucideIcon> = {
   Boxes,
   Ticket,
   Star,
+  ClipboardList,
   Settings,
 };
