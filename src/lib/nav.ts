@@ -6,13 +6,13 @@ export const NAV_LINKS = [
 ] as const;
 
 export const ACCOUNT_NAV = [
-  { label: "Overview", href: "/account" },
-  { label: "Orders", href: "/account/orders" },
-  { label: "Wishlist", href: "/wishlist" },
-  { label: "Addresses", href: "/account/addresses" },
-  { label: "Payment Methods", href: "/account/payment-methods" },
-  { label: "Profile", href: "/account/profile" },
-  { label: "Settings", href: "/account/settings" },
+  { label: "Visão geral", href: "/account" },
+  { label: "Pedidos", href: "/account/orders" },
+  { label: "Favoritos", href: "/wishlist" },
+  { label: "Endereços", href: "/account/addresses" },
+  { label: "Formas de pagamento", href: "/account/payment-methods" },
+  { label: "Perfil", href: "/account/profile" },
+  { label: "Configurações", href: "/account/settings" },
 ] as const;
 
 /**

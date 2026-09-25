@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
-import type { LegacyAddress as Address } from "@/lib/types";
-import { useProfileStore } from "@/store/profile-store";
+import { addressSchema, type AddressValues, BRAZILIAN_STATES } from "@/server/services/account/address-schema";
+import { createAddress, updateAddress } from "@/server/services/account/address-actions";
+import type { AccountAddress } from "@/server/services/account/address-queries";
 import {
   Dialog,
   DialogContent,
@@ -18,32 +18,41 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-const addressSchema = z.object({
-  label: z.string().min(1, "Label is required"),
-  fullName: z.string().min(1, "Full name is required"),
-  line1: z.string().min(1, "Address is required"),
-  line2: z.string().optional(),
-  city: z.string().min(1, "City is required"),
-  state: z.string().min(1, "State is required"),
-  postalCode: z.string().min(1, "Postal code is required"),
-  country: z.string().min(1, "Country is required"),
-  phone: z.string().min(7, "Enter a valid phone number"),
-  isDefault: z.boolean().optional(),
-});
-type AddressValues = z.infer<typeof addressSchema>;
+const EMPTY_VALUES: AddressValues = {
+  label: "Casa",
+  recipient: "",
+  postalCode: "",
+  street: "",
+  number: "",
+  complement: "",
+  district: "",
+  city: "",
+  state: "SP",
+  phone: "",
+  isDefaultShipping: false,
+  isDefaultBilling: false,
+};
 
 export function AddressFormDialog({
   open,
   onOpenChange,
   address,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  address?: Address;
+  address?: AccountAddress;
+  onSaved?: () => void;
 }) {
-  const addAddress = useProfileStore((s) => s.addAddress);
-  const updateAddress = useProfileStore((s) => s.updateAddress);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const {
     register,
@@ -51,128 +60,148 @@ export function AddressFormDialog({
     reset,
     watch,
     setValue,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<AddressValues>({
     resolver: zodResolver(addressSchema),
-    defaultValues: {
-      label: "Home",
-      fullName: "",
-      line1: "",
-      line2: "",
-      city: "",
-      state: "",
-      postalCode: "",
-      country: "United States",
-      phone: "",
-      isDefault: false,
-    },
+    defaultValues: EMPTY_VALUES,
   });
 
   useEffect(() => {
     if (open) {
+      setFormError(null);
       reset(
-        address ?? {
-          label: "Home",
-          fullName: "",
-          line1: "",
-          line2: "",
-          city: "",
-          state: "",
-          postalCode: "",
-          country: "United States",
-          phone: "",
-          isDefault: false,
-        }
+        address
+          ? {
+            label: address.label,
+            recipient: address.recipient,
+            postalCode: address.postalCode,
+            street: address.street,
+            number: address.number,
+            complement: address.complement ?? "",
+            district: address.district,
+            city: address.city,
+            state: address.state as AddressValues["state"],
+            phone: address.phone ?? "",
+            isDefaultShipping: address.isDefaultShipping,
+            isDefaultBilling: address.isDefaultBilling,
+          }
+          : EMPTY_VALUES
       );
     }
   }, [open, address, reset]);
 
-  function onSubmit(values: AddressValues) {
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        if (address) {
-          updateAddress(address.id, { ...values, isDefault: !!values.isDefault });
-          toast.success("Address updated");
-        } else {
-          addAddress({ ...values, isDefault: !!values.isDefault });
-          toast.success("Address added");
+  async function onSubmit(values: AddressValues) {
+    setFormError(null);
+    const result = address ? await updateAddress(address.id, values) : await createAddress(values);
+
+    if (!result.success) {
+      if (result.fieldErrors) {
+        for (const [field, message] of Object.entries(result.fieldErrors)) {
+          setError(field as keyof AddressValues, { message });
         }
-        onOpenChange(false);
-        resolve();
-      }, 500);
-    });
+      }
+      setFormError(result.formError ?? "Não foi possível salvar o endereço.");
+      return;
+    }
+
+    toast.success(address ? "Endereço atualizado" : "Endereço adicionado");
+    onOpenChange(false);
+    onSaved?.();
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{address ? "Edit Address" : "Add Address"}</DialogTitle>
+          <DialogTitle>{address ? "Editar endereço" : "Adicionar endereço"}</DialogTitle>
         </DialogHeader>
         <form id="address-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="label">Label</Label>
-              <Input id="label" placeholder="Home, Work…" {...register("label")} />
+              <Label htmlFor="label">Nome do endereço</Label>
+              <Input id="label" placeholder="Casa, Trabalho…" {...register("label")} />
               {errors.label && <p className="text-xs text-destructive">{errors.label.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="fullName">Full Name</Label>
-              <Input id="fullName" {...register("fullName")} />
-              {errors.fullName && <p className="text-xs text-destructive">{errors.fullName.message}</p>}
+              <Label htmlFor="recipient">Destinatário</Label>
+              <Input id="recipient" {...register("recipient")} />
+              {errors.recipient && <p className="text-xs text-destructive">{errors.recipient.message}</p>}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="line1">Address</Label>
-            <Input id="line1" {...register("line1")} />
-            {errors.line1 && <p className="text-xs text-destructive">{errors.line1.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="line2">Apartment, suite, etc. (optional)</Label>
-            <Input id="line2" {...register("line2")} />
-          </div>
+
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="city">City</Label>
+              <Label htmlFor="postalCode">CEP</Label>
+              <Input id="postalCode" placeholder="00000000" {...register("postalCode")} />
+              {errors.postalCode && <p className="text-xs text-destructive">{errors.postalCode.message}</p>}
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="street">Logradouro</Label>
+              <Input id="street" {...register("street")} />
+              {errors.street && <p className="text-xs text-destructive">{errors.street.message}</p>}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="number">Número</Label>
+              <Input id="number" {...register("number")} />
+              {errors.number && <p className="text-xs text-destructive">{errors.number.message}</p>}
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="complement">Complemento (opcional)</Label>
+              <Input id="complement" {...register("complement")} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="district">Bairro</Label>
+            <Input id="district" {...register("district")} />
+            {errors.district && <p className="text-xs text-destructive">{errors.district.message}</p>}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="city">Cidade</Label>
               <Input id="city" {...register("city")} />
               {errors.city && <p className="text-xs text-destructive">{errors.city.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="state">State</Label>
-              <Input id="state" {...register("state")} />
-              {errors.state && <p className="text-xs text-destructive">{errors.state.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="postalCode">Postal Code</Label>
-              <Input id="postalCode" {...register("postalCode")} />
-              {errors.postalCode && <p className="text-xs text-destructive">{errors.postalCode.message}</p>}
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="country">Country</Label>
-              <Input id="country" {...register("country")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" {...register("phone")} />
-              {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
+              <Label htmlFor="state">UF</Label>
+              <Select value={watch("state")} onValueChange={(v) => v && setValue("state", v as AddressValues["state"])}>
+                <SelectTrigger id="state" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {BRAZILIAN_STATES.map((uf) => (
+                    <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">Telefone (opcional)</Label>
+            <Input id="phone" placeholder="11999998888" {...register("phone")} />
+            {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
+          </div>
+
           <label className="flex items-center gap-2.5 text-sm text-foreground">
             <Checkbox
-              checked={watch("isDefault")}
-              onCheckedChange={(checked) => setValue("isDefault", !!checked)}
+              checked={watch("isDefaultShipping")}
+              onCheckedChange={(checked) => setValue("isDefaultShipping", !!checked)}
             />
-            Set as default address
+            Usar como endereço de entrega padrão
           </label>
+
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            Cancelar
           </Button>
           <Button type="submit" form="address-form" disabled={isSubmitting}>
-            {isSubmitting ? "Saving…" : "Save Address"}
+            {isSubmitting ? "Salvando…" : "Salvar endereço"}
           </Button>
         </DialogFooter>
       </DialogContent>
