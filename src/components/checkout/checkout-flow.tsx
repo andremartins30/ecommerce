@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -8,9 +8,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Loader2, Lock } from "lucide-react";
 import { checkoutSchema, STEP_FIELDS, type CheckoutFormValues } from "@/lib/checkout-schema";
-import { useCartStore } from "@/store/cart-store";
+import type { CartView } from "@/server/services/cart/cart-queries";
+import { clearCart } from "@/server/services/cart/cart-actions";
 import { useOrderStore, generateOrderId } from "@/store/order-store";
-import { computeOrderTotals } from "@/lib/pricing";
+import { computeOrderTotals, type DiscountInput } from "@/lib/pricing";
 import { formatPrice } from "@/lib/format";
 import { CheckoutSteps, type CheckoutStepKey } from "@/components/checkout/checkout-steps";
 import { PaymentMethods } from "@/components/checkout/payment-methods";
@@ -32,21 +33,16 @@ import { cn } from "@/lib/utils";
 
 const STEP_ORDER: CheckoutStepKey[] = ["information", "shipping", "payment", "review"];
 
-export function CheckoutFlow() {
+export function CheckoutFlow({ cart }: { cart: CartView }) {
   const router = useRouter();
-  const lines = useCartStore((s) => s.lines);
-  const clearCart = useCartStore((s) => s.clear);
-  const appliedDiscount = useCartStore((s) => s.appliedDiscount);
   const setLastOrder = useOrderStore((s) => s.setLastOrder);
 
-  const [hydrated, setHydrated] = useState(false);
   const [step, setStep] = useState<CheckoutStepKey>("information");
   const [placing, setPlacing] = useState(false);
 
-  useEffect(() => setHydrated(true), []);
-
-  const activeLines = lines.filter((l) => !l.savedForLater);
-  const subtotal = activeLines.reduce((sum, l) => sum + l.price * l.quantity, 0);
+  const activeLines = cart.lines;
+  const subtotal = cart.subtotalCents;
+  const appliedDiscount: DiscountInput | null = cart.coupon?.valid ? cart.coupon.discount : null;
 
   const {
     register,
@@ -107,9 +103,13 @@ export function CheckoutFlow() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function onPlaceOrder(values: CheckoutFormValues) {
+  // Order placement itself is still a client-side mock (no Order row is
+  // written) — that's task 22/23. What must be real already is that the
+  // persisted cart actually empties once "the order" is placed, since the
+  // cart is no longer client-only state that just resets on its own.
+  async function onPlaceOrder(values: CheckoutFormValues) {
     setPlacing(true);
-    setTimeout(() => {
+    try {
       const orderId = generateOrderId();
       const paymentLabels: Record<string, string> = {
         card: `Card •••• ${values.cardNumber?.slice(-4) ?? "0000"}`,
@@ -123,10 +123,10 @@ export function CheckoutFlow() {
         id: orderId,
         items: activeLines.map((l) => ({
           productId: l.productId,
-          name: l.name,
-          image: l.image,
-          variant: l.variantLabel,
-          price: l.price,
+          name: l.productName,
+          image: l.image?.url ?? "",
+          variant: `${l.volumeMl} ml`,
+          price: l.variant.priceCents,
           quantity: l.quantity,
         })),
         subtotal,
@@ -153,12 +153,12 @@ export function CheckoutFlow() {
         createdAt: new Date().toISOString(),
       });
 
-      clearCart();
+      await clearCart();
       router.push("/checkout/confirmation");
-    }, 1200);
+    } finally {
+      setPlacing(false);
+    }
   }
-
-  if (!hydrated) return <div className="container-page py-14" />;
 
   if (activeLines.length === 0) {
     return (
@@ -327,21 +327,21 @@ export function CheckoutFlow() {
       <div className="h-fit space-y-6 rounded-2xl border border-border bg-card p-6 lg:sticky lg:top-24">
         <div className="max-h-72 space-y-4 overflow-y-auto">
           {activeLines.map((line) => (
-            <div key={line.lineId} className="flex items-center gap-3">
+            <div key={line.id} className="flex items-center gap-3">
               <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-muted">
                 {line.image && (
-                  <Image src={line.image} alt={line.name} fill className="object-cover" sizes="56px" />
+                  <Image src={line.image.url} alt={line.image.alt || line.productName} fill className="object-cover" sizes="56px" />
                 )}
                 <span className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-[10px] font-semibold text-background">
                   {line.quantity}
                 </span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="line-clamp-1 text-sm font-medium text-foreground">{line.name}</p>
-                {line.variantLabel && <p className="text-xs text-muted-foreground">{line.variantLabel}</p>}
+                <p className="line-clamp-1 text-sm font-medium text-foreground">{line.productName}</p>
+                <p className="text-xs text-muted-foreground">{line.volumeMl} ml</p>
               </div>
               <span className="text-sm font-medium text-foreground">
-                {formatPrice(line.price * line.quantity)}
+                {formatPrice(line.lineTotalCents)}
               </span>
             </div>
           ))}

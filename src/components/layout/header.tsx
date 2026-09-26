@@ -17,7 +17,7 @@ import {
   User,
 } from "lucide-react";
 import { NAV_LINKS } from "@/lib/nav";
-import { useCartCount, useCartStore } from "@/store/cart-store";
+import { useCartStore } from "@/store/cart-store";
 import { useWishlistCount } from "@/store/wishlist-store";
 import { useCompareCount } from "@/store/compare-store";
 import { useUiStore } from "@/store/ui-store";
@@ -30,6 +30,7 @@ export function SiteHeader({
   storeName,
   logoUrl,
   phone,
+  cartCount,
 }: {
   transparent?: boolean;
   /** First name of the signed-in customer, resolved server-side from the real session. Null when signed out. */
@@ -38,13 +39,14 @@ export function SiteHeader({
   storeName: string;
   logoUrl: string;
   phone?: string;
+  /** Resolved server-side from the persisted cart (see Task 21) — refreshes on navigation, not live-pushed within a page. */
+  cartCount: number;
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const pathname = usePathname();
   const hydrated = useHydrated();
   const isAuthenticated = userDisplayName !== null;
-  const cartCount = useCartCount();
   const wishlistCount = useWishlistCount();
   const compareCount = useCompareCount();
   const openCart = useCartStore((s) => s.open);

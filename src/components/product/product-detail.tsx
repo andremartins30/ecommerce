@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { useVariantSelection } from "@/hooks/use-variant-selection";
 import { useDeliveryPromise } from "@/hooks/use-delivery-promise";
 import { useCartStore } from "@/store/cart-store";
+import { addItem } from "@/server/services/cart/cart-actions";
 import { cn } from "@/lib/utils";
 import type { ProductSummary } from "@/lib/types";
 import type { ShipmentPolicy } from "@/server/domain/delivery/delivery-promise";
@@ -67,12 +68,16 @@ export function ProductDetail({
   const openCart = useCartStore((s) => s.open);
   const deliveryDisclosure = useDeliveryPromise(variant, shippingPolicy);
 
-  function handleAddToCart(buyNow = false) {
+  async function handleAddToCart(buyNow = false) {
     if (!variant || !purchasable) return;
     setAddState("loading");
-    setTimeout(() => {
-      // TODO(task 21): route through the server-side cart service instead of
-      // the local store once carts are persisted.
+    try {
+      const result = await addItem({ variantId: variant.id, quantity });
+      if (!result.success) {
+        toast.error(result.formError ?? "Não foi possível adicionar à sacola.");
+        setAddState("idle");
+        return;
+      }
       toast.success("Adicionado à sacola", { description: product.name });
       setAddState("added");
       setTimeout(() => setAddState("idle"), 1200);
@@ -81,7 +86,10 @@ export function ProductDetail({
       } else {
         openCart();
       }
-    }, 450);
+    } catch {
+      toast.error("Não foi possível adicionar à sacola.");
+      setAddState("idle");
+    }
   }
 
   const hasPyramid =

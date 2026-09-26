@@ -7,11 +7,13 @@ export function SiteHeaderController({
   storeName,
   logoUrl,
   phone,
+  cartCount,
 }: {
   userDisplayName: string | null;
   storeName: string;
   logoUrl: string;
   phone?: string;
+  cartCount: number;
 }) {
   return (
     <SiteHeader
@@ -20,6 +22,7 @@ export function SiteHeaderController({
       storeName={storeName}
       logoUrl={logoUrl}
       phone={phone}
+      cartCount={cartCount}
     />
   );
 }

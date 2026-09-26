@@ -8,14 +8,15 @@ import { FloatingCompareBar } from "@/components/compare/floating-compare-bar";
 import { listCategories } from "@/server/services/catalog/queries";
 import { getStoreSettings } from "@/server/services/settings/store-settings";
 import { getSessionUser } from "@/server/services/auth/session";
+import { getCartCount } from "@/server/services/cart/cart-queries";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [categories, settings, user] = await Promise.all([
+  const [categories, settings, user, cartCount] = await Promise.all([
     listCategories(),
     getStoreSettings(),
     getSessionUser(),
+    getCartCount(),
   ]);
-  const shippingPolicy = { handlingDays: settings.handlingDays, shipmentPolicy: settings.shipmentPolicy };
   const userDisplayName = user ? user.customer?.name ?? user.email : null;
 
   return (
@@ -25,6 +26,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         storeName={settings.name}
         logoUrl={settings.logoUrl}
         phone={settings.phone || undefined}
+        cartCount={cartCount}
       />
       <main className="flex-1">{children}</main>
       <SiteFooter
@@ -33,7 +35,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         email={settings.email || undefined}
         phone={settings.phone || undefined}
       />
-      <CartDrawer shippingPolicy={shippingPolicy} />
+      <CartDrawer />
       <SearchOverlay />
       <MobileNav categories={categories} />
       <QuickViewDialog />

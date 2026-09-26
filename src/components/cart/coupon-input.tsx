@@ -1,59 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Check, Loader2, Tag, X } from "lucide-react";
 import { toast } from "sonner";
-import { getDiscountByCode } from "@/lib/data/discounts";
-import type { DiscountInput } from "@/lib/pricing";
+import { applyCoupon, removeCoupon } from "@/server/services/cart/cart-actions";
+import type { CartCoupon } from "@/server/services/cart/cart-queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export function CouponInput({
-  appliedCode,
-  onApply,
-  onRemove,
+  coupon,
+  onChanged,
 }: {
-  appliedCode: string | null;
-  onApply: (discount: DiscountInput) => void;
-  onRemove: () => void;
+  coupon: CartCoupon | null;
+  onChanged?: () => void;
 }) {
   const [code, setCode] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   function handleApply(e: React.FormEvent) {
     e.preventDefault();
     if (!code.trim()) return;
-    setStatus("loading");
-    setTimeout(() => {
-      const discount = getDiscountByCode(code.trim());
-      if (discount) {
-        onApply({
-          code: discount.code,
-          kind: discount.type,
-          value: discount.value,
-          minOrderCents: discount.minOrder,
-        });
-        toast.success("Cupom aplicado", { description: `${discount.code} adicionado ao pedido` });
+    setError(null);
+    startTransition(async () => {
+      const result = await applyCoupon({ code });
+      if (result.success) {
+        toast.success("Cupom aplicado", { description: `${code.trim().toUpperCase()} adicionado ao pedido` });
         setCode("");
-        setStatus("idle");
+        onChanged?.();
       } else {
-        setStatus("error");
-        toast.error("Código inválido ou expirado");
+        setError(result.formError ?? "Código inválido ou expirado.");
+        toast.error(result.formError ?? "Código inválido ou expirado.");
       }
-    }, 600);
+    });
   }
 
-  if (appliedCode) {
+  function handleRemove() {
+    startTransition(async () => {
+      const result = await removeCoupon();
+      if (result.success) onChanged?.();
+    });
+  }
+
+  if (coupon?.valid) {
     return (
       <div className="flex items-center justify-between rounded-lg border border-success/30 bg-success/10 px-3.5 py-2.5">
         <div className="flex items-center gap-2 text-sm font-medium text-success">
           <Check className="size-4" />
-          {appliedCode} applied
+          {coupon.code} aplicado
         </div>
         <button
-          onClick={onRemove}
-          aria-label="Remove coupon"
+          onClick={handleRemove}
+          disabled={isPending}
+          aria-label="Remover cupom"
           className="rounded-md p-1 text-success hover:bg-success/15"
         >
           <X className="size-4" />
@@ -71,17 +72,17 @@ export function CouponInput({
             value={code}
             onChange={(e) => {
               setCode(e.target.value.toUpperCase());
-              if (status === "error") setStatus("idle");
+              if (error) setError(null);
             }}
-            placeholder="Discount code"
-            className={cn("h-10 pl-9", status === "error" && "border-destructive")}
+            placeholder="Código de desconto"
+            className={cn("h-10 pl-9", error && "border-destructive")}
           />
         </div>
-        <Button type="submit" variant="outline" disabled={status === "loading" || !code.trim()} className="h-10">
-          {status === "loading" ? <Loader2 className="size-4 animate-spin" /> : "Apply"}
+        <Button type="submit" variant="outline" disabled={isPending || !code.trim()} className="h-10">
+          {isPending ? <Loader2 className="size-4 animate-spin" /> : "Aplicar"}
         </Button>
       </div>
-      {status === "error" && <p className="text-xs text-destructive">That code isn&apos;t valid or has expired.</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </form>
   );
 }

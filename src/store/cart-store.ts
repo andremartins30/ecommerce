@@ -3,7 +3,23 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { LegacyProduct as Product, LegacyProductVariant as ProductVariant } from "@/lib/types";
-import type { DiscountInput } from "@/lib/pricing";
+
+/**
+ * As of Task 21, the real cart (line items, quantities, pricing, coupon) is
+ * persisted server-side — see `src/server/services/cart/`. What is left
+ * here is:
+ *
+ * 1. `isOpen`/`open`/`close`/`toggle` — the cart *drawer's* UI state, which
+ *    has no reason to live on the server; header.tsx and product-detail.tsx
+ *    still call `open()` to pop the drawer after adding an item, and
+ *    cart-drawer.tsx reads `isOpen` to render it.
+ * 2. `lines`/`addItem`/etc — kept only because compare-view.tsx (a page that
+ *    is itself still 100% mock/legacy apparel data, unrelated to the real
+ *    perfumery catalogue) calls `addItem()` against its own mock products.
+ *    Nothing that touches real products reads or writes this anymore. This
+ *    is dead weight scheduled for removal once /compare is migrated to real
+ *    data — not before, or that page would have nothing to add to.
+ */
 
 export interface CartLine {
   lineId: string;
@@ -12,40 +28,19 @@ export interface CartLine {
   name: string;
   brand: string;
   image: string;
-  /**
-   * Cents, snapshotted when the line was added. Display only — the server
-   * recomputes the authoritative price at checkout and never trusts this.
-   */
   price: number;
   variantId: string;
   variantLabel?: string;
   quantity: number;
-  savedForLater?: boolean;
 }
-
-/**
- * The shape the pricing module expects. Declared there, not here: a pricing
- * rule must not depend on a client store. The store carries the coupon, the
- * pricing module decides what it is worth.
- */
-export type AppliedDiscount = DiscountInput;
 
 interface CartState {
   lines: CartLine[];
   isOpen: boolean;
-  lastAdded?: string;
-  appliedDiscount: AppliedDiscount | null;
   open: () => void;
   close: () => void;
   toggle: () => void;
   addItem: (product: Product, variant: ProductVariant, quantity?: number) => void;
-  removeItem: (lineId: string) => void;
-  updateQuantity: (lineId: string, quantity: number) => void;
-  saveForLater: (lineId: string) => void;
-  moveToCart: (lineId: string) => void;
-  applyDiscount: (discount: AppliedDiscount) => void;
-  removeDiscount: () => void;
-  clear: () => void;
 }
 
 export const useCartStore = create<CartState>()(
@@ -53,8 +48,6 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       lines: [],
       isOpen: false,
-      lastAdded: undefined,
-      appliedDiscount: null,
       open: () => set({ isOpen: true }),
       close: () => set({ isOpen: false }),
       toggle: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -66,7 +59,6 @@ export const useCartStore = create<CartState>()(
             lines: get().lines.map((l) =>
               l.lineId === lineId ? { ...l, quantity: l.quantity + quantity } : l
             ),
-            lastAdded: lineId,
           });
           return;
         }
@@ -87,44 +79,9 @@ export const useCartStore = create<CartState>()(
               quantity,
             },
           ],
-          lastAdded: lineId,
         });
       },
-      removeItem: (lineId) => set({ lines: get().lines.filter((l) => l.lineId !== lineId) }),
-      updateQuantity: (lineId, quantity) =>
-        set({
-          lines: get().lines.map((l) =>
-            l.lineId === lineId ? { ...l, quantity: Math.max(1, quantity) } : l
-          ),
-        }),
-      saveForLater: (lineId) =>
-        set({
-          lines: get().lines.map((l) =>
-            l.lineId === lineId ? { ...l, savedForLater: true } : l
-          ),
-        }),
-      moveToCart: (lineId) =>
-        set({
-          lines: get().lines.map((l) =>
-            l.lineId === lineId ? { ...l, savedForLater: false } : l
-          ),
-        }),
-      applyDiscount: (discount) => set({ appliedDiscount: discount }),
-      removeDiscount: () => set({ appliedDiscount: null }),
-      clear: () => set({ lines: [], appliedDiscount: null }),
     }),
     { name: "perfumaria-cart" }
   )
 );
-
-export const useCartCount = () =>
-  useCartStore((s) =>
-    s.lines.filter((l) => !l.savedForLater).reduce((sum, l) => sum + l.quantity, 0)
-  );
-
-export const useCartSubtotal = () =>
-  useCartStore((s) =>
-    s.lines
-      .filter((l) => !l.savedForLater)
-      .reduce((sum, l) => sum + l.price * l.quantity, 0)
-  );

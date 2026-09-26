@@ -6,6 +6,7 @@ import { prisma } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/server/services/auth/password";
 import { generateOpaqueToken, hashToken } from "@/server/services/auth/tokens";
 import { createSession, destroySession, getSessionUser, markReauthenticated } from "@/server/services/auth/session";
+import { mergeGuestCartIntoCustomerCart } from "@/server/services/cart/cart-identity";
 import { getMailProvider, emailVerificationTemplate, passwordResetTemplate } from "@/server/providers/mail";
 import { getStoreSettings } from "@/server/services/settings/store-settings";
 import {
@@ -142,6 +143,7 @@ export async function loginAction(input: unknown): Promise<AuthActionResult> {
   // elevated window immediately rather than making the user re-enter their
   // password a second time just to do something sensitive right after login.
   await markReauthenticated();
+  await mergeGuestCartOnLogin(user.id);
 
   // Staff enrolled in MFA must clear a TOTP challenge before proxy.ts admits
   // them to /admin — the session exists (so /admin/mfa/challenge itself is
@@ -151,6 +153,12 @@ export async function loginAction(input: unknown): Promise<AuthActionResult> {
   }
 
   return { success: true };
+}
+
+/** A guest cart is only worth merging for a customer identity — a staff login has no cart at all. */
+async function mergeGuestCartOnLogin(userId: string): Promise<void> {
+  const customer = await prisma.customer.findUnique({ where: { userId }, select: { id: true } });
+  if (customer) await mergeGuestCartIntoCustomerCart(customer.id);
 }
 
 export async function registerAction(input: unknown): Promise<AuthActionResult> {
@@ -174,12 +182,14 @@ export async function registerAction(input: unknown): Promise<AuthActionResult> 
       passwordHash,
       customer: { create: { name: parsed.data.name } },
     },
+    select: { id: true, customer: { select: { id: true } } },
   });
 
   await issueEmailVerification(user.id, email);
 
   const meta = await requestMetadata();
   await createSession(user.id, meta);
+  if (user.customer) await mergeGuestCartIntoCustomerCart(user.customer.id);
 
   return { success: true };
 }
